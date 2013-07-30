@@ -15,7 +15,6 @@
 #include "nsIDocShell.h"
 #include "nsIWebNavigation.h"
 #include "nsPluginHost.h"
-#include "nsPluginTags.h"
 #include "nsIObserverService.h"
 #include "nsIWeakReference.h"
 #include "mozilla/Services.h"
@@ -125,7 +124,7 @@ nsPluginArray::Refresh(bool aReloadDocuments)
   // that plugins did not change and was not reloaded
   if (pluginHost->ReloadPlugins() ==
       NS_ERROR_PLUGINS_PLUGINSNOTCHANGED) {
-    nsTArray<nsRefPtr<nsPluginTag> > newPluginTags;
+    nsTArray<nsCOMPtr<nsIPluginTag> > newPluginTags;
     pluginHost->GetPlugins(newPluginTags);
 
     // Check if the number of plugins we know about are different from
@@ -282,9 +281,11 @@ HasStringPrefix(const nsCString& str, const nsACString& prefix) {
 
 static bool
 IsPluginEnumerable(const nsTArray<nsCString>& enumerableNames,
-                   const nsPluginTag* pluginTag)
+                   nsIPluginTag* pluginTag)
 {
-  const nsCString& pluginName = pluginTag->mName;
+  nsCString pluginName;
+  nsresult rv = pluginTag->GetName(pluginName);
+  NS_ENSURE_SUCCESS(rv, false);
 
   const uint32_t length = enumerableNames.Length();
   for (uint32_t i = 0; i < length; i++) {
@@ -311,7 +312,7 @@ nsPluginArray::EnsurePlugins()
     return;
   }
 
-  nsTArray<nsRefPtr<nsPluginTag> > pluginTags;
+  nsTArray<nsCOMPtr<nsIPluginTag> > pluginTags;
   pluginHost->GetPlugins(pluginTags);
 
   nsTArray<nsCString> enumerableNames;
@@ -335,7 +336,7 @@ nsPluginArray::EnsurePlugins()
   // need to wrap each of these with a nsPluginElement, which is
   // scriptable.
   for (uint32_t i = 0; i < pluginTags.Length(); ++i) {
-    nsPluginTag* pluginTag = pluginTags[i];
+    nsIPluginTag* pluginTag = pluginTags[i];
 
     // Add the plugin to the list of hidden plugins or non-hidden plugins?
     nsTArray<nsRefPtr<nsPluginElement> >& pluginArray =
@@ -359,7 +360,7 @@ NS_INTERFACE_MAP_END
 NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE(nsPluginElement, mWindow, mMimeTypes)
 
 nsPluginElement::nsPluginElement(nsPIDOMWindow* aWindow,
-                                 nsPluginTag* aPluginTag)
+                                 nsIPluginTag* aPluginTag)
   : mWindow(aWindow),
     mPluginTag(aPluginTag)
 {
@@ -386,25 +387,45 @@ nsPluginElement::WrapObject(JSContext* aCx)
 void
 nsPluginElement::GetDescription(nsString& retval) const
 {
-  CopyUTF8toUTF16(mPluginTag->mDescription, retval);
+  nsCString desc;
+  if (NS_SUCCEEDED(mPluginTag->GetDescription(desc))) {
+    CopyUTF8toUTF16(desc, retval);
+  } else {
+    retval.Truncate();
+  }
 }
 
 void
 nsPluginElement::GetFilename(nsString& retval) const
 {
-  CopyUTF8toUTF16(mPluginTag->mFileName, retval);
+  nsCString filename;
+  if (NS_SUCCEEDED(mPluginTag->GetFilename(filename))) {
+    CopyUTF8toUTF16(filename, retval);
+  } else {
+    retval.Truncate();
+  }
 }
 
 void
 nsPluginElement::GetVersion(nsString& retval) const
 {
-  CopyUTF8toUTF16(mPluginTag->mVersion, retval);
+  nsCString ver;
+  if (NS_SUCCEEDED(mPluginTag->GetVersion(ver))) {
+    CopyUTF8toUTF16(ver, retval);
+  } else {
+    retval.Truncate();
+  }
 }
 
 void
 nsPluginElement::GetName(nsString& retval) const
 {
-  CopyUTF8toUTF16(mPluginTag->mName, retval);
+  nsCString name;
+  if (NS_SUCCEEDED(mPluginTag->GetName(name))) {
+    CopyUTF8toUTF16(name, retval);
+  } else {
+    retval.Truncate();
+  }
 }
 
 nsMimeType*
@@ -489,8 +510,43 @@ nsPluginElement::EnsurePluginMimeTypes()
     return;
   }
 
-  for (uint32_t i = 0; i < mPluginTag->mMimeTypes.Length(); ++i) {
-    NS_ConvertUTF8toUTF16 type(mPluginTag->mMimeTypes[i]);
-    mMimeTypes.AppendElement(new nsMimeType(mWindow, this, i, type));
+  uint32_t mimeCount = 0,
+           descCount = 0,
+           extCount = 0;
+  char16_t **mimeTypes = nullptr,
+           **mimeDescriptions = nullptr,
+           **mimeExtensions = nullptr;
+
+  nsresult rv = mPluginTag->GetMimeTypes(&mimeCount, &mimeTypes);
+  if (NS_SUCCEEDED(rv)) {
+    rv = mPluginTag->GetMimeDescriptions(&descCount, &mimeDescriptions);
+  }
+  if (NS_SUCCEEDED(rv)) {
+    rv = mPluginTag->GetExtensions(&extCount, &mimeExtensions);
+  }
+
+  if (NS_SUCCEEDED(rv) && (mimeCount != descCount || mimeCount != extCount)) {
+    rv = NS_ERROR_UNEXPECTED;
+    MOZ_ASSERT(false, "mime type arrays expected to be the same length");
+  }
+  MOZ_ASSERT(NS_SUCCEEDED(rv), "Listing plugin tag MIME data shouldn't fail");
+
+  if (NS_SUCCEEDED(rv)) {
+    for (uint32_t i = 0; i < mimeCount; ++i) {
+      mMimeTypes.AppendElement(new nsMimeType(mWindow, this,
+                                              nsString(mimeTypes[i]),
+                                              nsString(mimeDescriptions[i]),
+                                              nsString(mimeExtensions[i])));
+    }
+  }
+
+  if (mimeTypes) {
+    nsMemory::Free(mimeTypes);
+  }
+  if (mimeDescriptions) {
+    nsMemory::Free(mimeDescriptions);
+  }
+  if (mimeExtensions) {
+    nsMemory::Free(mimeExtensions);
   }
 }

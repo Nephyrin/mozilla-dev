@@ -11,11 +11,12 @@
 #include "nsWeakReference.h"
 #include "nsIObserver.h"
 #include "nsWrapperCache.h"
-#include "nsPluginTags.h"
+#include "nsIPluginTag.h"
 #include "nsPIDOMWindow.h"
 
 class nsPluginElement;
 class nsMimeType;
+class nsString;
 
 class nsPluginArray MOZ_FINAL : public nsIObserver,
                                 public nsSupportsWeakReference,
@@ -82,12 +83,13 @@ public:
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
   NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_CLASS(nsPluginElement)
 
-  nsPluginElement(nsPIDOMWindow* aWindow, nsPluginTag* aPluginTag);
+  nsPluginElement(nsPIDOMWindow* aWindow, nsIPluginTag* aPluginTag);
 
   nsPIDOMWindow* GetParentObject() const;
   virtual JSObject* WrapObject(JSContext* aCx) MOZ_OVERRIDE;
 
-  nsPluginTag* PluginTag() const
+  // addref FIXME
+  nsIPluginTag* PluginTag() const
   {
     return mPluginTag;
   }
@@ -114,7 +116,7 @@ protected:
   void EnsurePluginMimeTypes();
 
   nsCOMPtr<nsPIDOMWindow> mWindow;
-  nsRefPtr<nsPluginTag> mPluginTag;
+  nsCOMPtr<nsIPluginTag> mPluginTag;
   nsTArray<nsRefPtr<nsMimeType> > mMimeTypes;
 };
 

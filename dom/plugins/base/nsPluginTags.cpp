@@ -245,7 +245,7 @@ nsresult nsPluginTag::EnsureMembersAreUTF8()
     ConvertToUTF8(decoder, mFileName);
     ConvertToUTF8(decoder, mFullPath);
   }
-  
+
   // The description of the plug-in and the various MIME type descriptions
   // should be encoded in the standard plain text file encoding for this system.
   // XXX should we add kPlatformCharsetSel_PluginResource?

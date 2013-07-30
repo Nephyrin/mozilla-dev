@@ -1094,7 +1094,7 @@ nsPluginHost::IsPluginEnabledForExtension(const char* aExtension,
 }
 
 void
-nsPluginHost::GetPlugins(nsTArray<nsRefPtr<nsPluginTag> >& aPluginArray)
+nsPluginHost::GetPlugins(nsTArray<nsCOMPtr<nsIPluginTag> >& aPluginArray)
 {
   aPluginArray.Clear();
 

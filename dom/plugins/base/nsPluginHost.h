@@ -87,7 +87,7 @@ public:
 
   nsresult IsPluginEnabledForExtension(const char* aExtension, const char* &aMimeType);
 
-  void GetPlugins(nsTArray<nsRefPtr<nsPluginTag> >& aPluginArray);
+  void GetPlugins(nsTArray<nsCOMPtr<nsIPluginTag> >& aPluginArray);
 
   nsresult GetURL(nsISupports* pluginInst,
                   const char* url,
