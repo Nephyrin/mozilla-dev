@@ -80,6 +80,7 @@ interface nsIFakePluginTag : nsIPluginTag
   // plugin. Note that the original data/src value for the plugin is not loaded
   // and will need to be requested by the handler via XHR or similar if desired.
   attribute nsIURI handlerURI;
+  // FIXME enforce non-null ^
 
   // FIXME need to invalidate plugins array on change of parameters
   // FIXME what do we do about 'blocklisted' and the like?

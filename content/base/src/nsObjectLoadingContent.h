@@ -59,12 +59,16 @@ class nsObjectLoadingContent : public nsImageLoadingContent
       eType_Image          = TYPE_IMAGE,
       // Content is a plugin
       eType_Plugin         = TYPE_PLUGIN,
+      // Content is a fake plugin, which loads as a document but behaves as a
+      // plugin (see nsPluginHost::CreateFakePlugin)
+      eType_FakePlugin     = TYPE_FAKE_PLUGIN,
       // Content is a subdocument, possibly SVG
       eType_Document       = TYPE_DOCUMENT,
       // No content loaded (fallback). May be showing alternate content or
       // a custom error handler - *including* click-to-play dialogs
       eType_Null           = TYPE_NULL
     };
+
     enum FallbackType {
       // The content type is not supported (e.g. plugin not installed)
       eFallbackUnsupported = nsIObjectLoadingContent::PLUGIN_UNSUPPORTED,
@@ -92,9 +96,6 @@ class nsObjectLoadingContent : public nsImageLoadingContent
       eFallbackVulnerableUpdatable = nsIObjectLoadingContent::PLUGIN_VULNERABLE_UPDATABLE,
       // The plugin is vulnerable (no update available)
       eFallbackVulnerableNoUpdate = nsIObjectLoadingContent::PLUGIN_VULNERABLE_NO_UPDATE,
-      // The plugin is disabled and play preview content is displayed until
-      // the extension code enables it by sending the MozPlayPlugin event
-      eFallbackPlayPreview = nsIObjectLoadingContent::PLUGIN_PLAY_PREVIEW
     };
 
     nsObjectLoadingContent();
@@ -173,7 +174,7 @@ class nsObjectLoadingContent : public nsImageLoadingContent
     }
     uint32_t GetContentTypeForMIMEType(const nsAString& aMIMEType)
     {
-      return GetTypeOfContent(NS_ConvertUTF16toUTF8(aMIMEType));
+      return GetTypeOfContent(NS_ConvertUTF16toUTF8(aMIMEType), false);
     }
     void PlayPlugin(mozilla::ErrorResult& aRv)
     {
@@ -191,7 +192,7 @@ class nsObjectLoadingContent : public nsImageLoadingContent
     {
       return mURI;
     }
-  
+
     /**
      * The default state that this plugin would be without manual activation.
      * @returns PLUGIN_ACTIVE if the default state would be active.
@@ -206,9 +207,10 @@ class nsObjectLoadingContent : public nsImageLoadingContent
     {
       return !!mInstanceOwner;
     }
-    void CancelPlayPreview(mozilla::ErrorResult& aRv)
+    // FIXME rename this
+    void SkipFakePlugins(mozilla::ErrorResult& aRv)
     {
-      aRv = CancelPlayPreview();
+      aRv = SkipFakePlugins();
     }
     void SwapFrameLoaders(nsXULElement& aOtherOwner, mozilla::ErrorResult& aRv)
     {
@@ -389,9 +391,10 @@ class nsObjectLoadingContent : public nsImageLoadingContent
      * If this object is allowed to play plugin content, or if it would display
      * click-to-play instead.
      * NOTE that this does not actually check if the object is a loadable plugin
-     * NOTE This ignores the current activated state. The caller should check this if appropriate.
+     * NOTE This ignores the current activated state. The caller should check
+     *      this if appropriate.
      */
-    bool ShouldPlay(FallbackType &aReason, bool aIgnoreCurrentType);
+    bool ShouldPlay(FallbackType &aReason);
 
     /*
      * Helper to check if mBaseURI can be used by java as a codebase
@@ -431,6 +434,14 @@ class nsObjectLoadingContent : public nsImageLoadingContent
     bool MakePluginListener();
 
     /**
+     * Helper to spawn mFrameLoader and return a pointer to its docshell
+     *
+     * @param aURI URI we intend to load for the recursive load check (does not
+     *             actually load anything)
+     */
+    already_AddRefed<nsIDocShell> SetupFrameLoader(nsIURI *aRecursionCheckURI);
+
+    /**
      * Unloads all content and resets the object to a completely unloaded state
      *
      * NOTE Calls StopPluginInstance() and may spin the event loop
@@ -458,11 +469,15 @@ class nsObjectLoadingContent : public nsImageLoadingContent
      * Returns a ObjectType value corresponding to the type of content we would
      * support the given MIME type as, taking capabilities and plugin state
      * into account
-     * 
+     *
+     * @param aNoFakePlugin Don't select a fake plugin handler as a valid type,
+     *                      as when SkipFakePlugins() is called.
+     * @return The ObjectType enum value that we would attempt to load
+     *
      * NOTE this does not consider whether the content would be suppressed by
      *      click-to-play or other content policy checks
      */
-    ObjectType GetTypeOfContent(const nsCString& aMIMEType);
+    ObjectType GetTypeOfContent(const nsCString& aMIMEType, bool aNoFakePlugin);
 
     /**
      * Gets the frame that's associated with this content node.
@@ -563,8 +578,8 @@ class nsObjectLoadingContent : public nsImageLoadingContent
     // activated by PlayPlugin(). (see ShouldPlay())
     bool                        mActivated : 1;
 
-    // Used to keep track of whether or not a plugin is blocked by play-preview.
-    bool                        mPlayPreviewCanceled : 1;
+    // If we should not use fake plugins until the next type change
+    bool                        mSkipFakePlugins : 1;
 
     // Protects DoStopPlugin from reentry (bug 724781).
     bool                        mIsStopping : 1;
@@ -572,8 +587,8 @@ class nsObjectLoadingContent : public nsImageLoadingContent
     // Protects LoadObject from re-entry
     bool                        mIsLoading : 1;
 
-    // For plugin stand-in types (click-to-play, play preview, ...) tracks
-    // whether content js has tried to access the plugin script object.
+    // For plugin stand-in types (click-to-play) tracks whether content js has
+    // tried to access the plugin script object.
     bool                        mScriptRequested : 1;
 
     nsWeakFrame                 mPrintFrame;

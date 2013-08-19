@@ -82,15 +82,17 @@ interface MozObjectLoadingContent {
   // make sure to update this list if nsIObjectLoadingContent changes.  Also,
   // make sure everything on here is [ChromeOnly].
   [ChromeOnly]
-  const unsigned long TYPE_LOADING  = 0;
+  const unsigned long TYPE_LOADING     = 0;
   [ChromeOnly]
-  const unsigned long TYPE_IMAGE    = 1;
+  const unsigned long TYPE_IMAGE       = 1;
   [ChromeOnly]
-  const unsigned long TYPE_PLUGIN   = 2;
+  const unsigned long TYPE_PLUGIN      = 2;
   [ChromeOnly]
-  const unsigned long TYPE_DOCUMENT = 3;
+  const unsigned long TYPE_FAKE_PLUGIN = 3;
   [ChromeOnly]
-  const unsigned long TYPE_NULL     = 4;
+  const unsigned long TYPE_DOCUMENT    = 4;
+  [ChromeOnly]
+  const unsigned long TYPE_NULL        = 5;
 
   // The content type is not supported (e.g. plugin not installed)
   [ChromeOnly]
@@ -129,9 +131,6 @@ interface MozObjectLoadingContent {
   // The plugin is vulnerable (no update available)
   [ChromeOnly]
   const unsigned long PLUGIN_VULNERABLE_NO_UPDATE = 10;
-  // The plugin is in play preview mode
-  [ChromeOnly]
-  const unsigned long PLUGIN_PLAY_PREVIEW         = 11;
 
   /**
    * The actual mime type (the one we got back from the network
@@ -156,8 +155,8 @@ interface MozObjectLoadingContent {
   unsigned long getContentTypeForMIMEType(DOMString aMimeType);
 
   /**
-   * This method will play a plugin that has been stopped by the
-   * click-to-play plugins or play-preview features.
+   * This method will play a plugin that has been stopped by the click-to-play
+   * feature.
    */
   [ChromeOnly, Throws]
   void playPlugin();
@@ -174,7 +173,7 @@ interface MozObjectLoadingContent {
   /**
    * This attribute will return true if the current content type has been
    * activated, either explicitly or by passing checks that would have it be
-   * click-to-play or play-preview.
+   * click-to-play.
    */
   [ChromeOnly]
   readonly attribute boolean activated;
@@ -200,10 +199,10 @@ interface MozObjectLoadingContent {
   readonly attribute boolean hasRunningPlugin;
 
   /**
-   * This method will disable the play-preview plugin state.
+   * Disable the use of fake plugins and reload the tag if necessary
    */
   [ChromeOnly, Throws]
-  void cancelPlayPreview();
+  void skipFakePlugins();
 };
 
 HTMLObjectElement implements MozImageLoadingContent;

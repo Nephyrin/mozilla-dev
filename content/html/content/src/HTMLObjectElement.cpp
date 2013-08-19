@@ -206,7 +206,7 @@ HTMLObjectElement::IsFocusableForTabIndex()
   }
 
   return IsEditableRoot() ||
-         (Type() == eType_Document &&
+         ((Type() == eType_Document || Type() == eType_FakePlugin) &&
           nsContentUtils::IsSubDocumentTabbable(this));
 }
 
@@ -230,7 +230,8 @@ HTMLObjectElement::IsHTMLFocusable(bool aWithMouse,
   // This method doesn't call nsGenericHTMLFormElement intentionally.
   // TODO: It should probably be changed when bug 597242 will be fixed.
   if (Type() == eType_Plugin || IsEditableRoot() ||
-      (Type() == eType_Document && nsContentUtils::IsSubDocumentTabbable(this))) {
+      ((Type() == eType_Document || Type() == eType_FakePlugin) &&
+       nsContentUtils::IsSubDocumentTabbable(this))) {
     // Has plugin content: let the plugin decide what to do in terms of
     // internal focus from mouse clicks
     if (aTabIndex) {
@@ -261,7 +262,7 @@ HTMLObjectElement::GetDesiredIMEState()
   if (Type() == eType_Plugin) {
     return IMEState(IMEState::PLUGIN);
   }
-   
+
   return nsGenericHTMLFormElement::GetDesiredIMEState();
 }
 

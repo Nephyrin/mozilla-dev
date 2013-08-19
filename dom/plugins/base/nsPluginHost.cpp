@@ -1491,6 +1491,9 @@ nsPluginHost::CreateFakePlugin(/* utf-8 */ const nsACString & aHandlerURI,
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
+  // FIXME should happen only when we have mime types? or how do we delete
+  //       these?
+  mFakePlugins.AppendElement(newTag);
   newTag.forget(aResult);
   return NS_OK;
 }
