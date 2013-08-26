@@ -44,6 +44,78 @@ inline char* new_str(const char* str)
   return result;
 }
 
+// check comma delimitered extensions
+static bool ExtensionInList(const char *aExtensionList, const char *aExtension)
+{
+  if (!aExtensionList || !aExtension)
+    return false;
+
+  const char *pExt = aExtensionList;
+  const char *pComma = strchr(pExt, ',');
+  if (!pComma)
+    return PL_strcasecmp(pExt, aExtension) == 0;
+
+  int extlen = strlen(aExtension);
+  while (pComma) {
+    int length = pComma - pExt;
+    if (length == extlen && 0 == PL_strncasecmp(aExtension, pExt, length))
+      return true;
+    pComma++;
+    pExt = pComma;
+    pComma = strchr(pExt, ',');
+  }
+
+  // the last one
+  return PL_strcasecmp(pExt, aExtension) == 0;
+}
+
+// Search for an extension in an extensions array, and optionally return its
+// matching mime type
+static bool SearchExtensions(const nsTArray<nsCString> & aExtensions,
+                             const nsTArray<nsCString> & aMimeTypes,
+                             const nsACString & aFindExtension,
+                             nsACString & aMatchingType)
+{
+  uint32_t mimes = aMimeTypes.Length();
+  MOZ_ASSERT(mimes == aExtensions.Length(),
+             "These arrays should have matching elements");
+
+  aMatchingType.Truncate();
+
+  for (uint32_t i = 0; i < mimes; i++) {
+    if (ExtensionInList(aExtensions[i].get(), aFindExtension.Data())) {
+      aMatchingType = aMimeTypes[i];
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static nsCString
+MakeNiceFileName(const nsCString & aFileName)
+{
+  nsCString niceName = aFileName;
+  int32_t niceNameLength = aFileName.RFind(".");
+  NS_ASSERTION(niceNameLength != kNotFound, "mFileName doesn't have a '.'?");
+  while (niceNameLength > 0) {
+    char chr = aFileName[niceNameLength - 1];
+    if (!std::isalpha(chr))
+      niceNameLength--;
+    else
+      break;
+  }
+
+  // If it turns out that niceNameLength <= 0, we'll fall back and use the
+  // entire mFileName (which we've already taken care of, a few lines back)
+  if (niceNameLength > 0) {
+    niceName.Truncate(niceNameLength);
+  }
+
+  ToLowerCase(niceName);
+  return niceName;
+}
+
 static nsCString
 MakePrefNameForPlugin(const char* const subname, nsPluginTag* aTag)
 {
@@ -55,6 +127,29 @@ MakePrefNameForPlugin(const char* const subname, nsPluginTag* aTag)
   pref.Append(aTag->GetNiceFileName());
 
   return pref;
+}
+
+static nsresult
+CStringArrayToXPCArray(nsTArray<nsCString> & aArray,
+                       uint32_t* aCount,
+                       char16_t*** aResults)
+{
+  uint32_t count = aArray.Length();
+  if (!count) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
+  *aResults =
+    static_cast<char16_t**>(nsMemory::Alloc(count * sizeof(**aResults)));
+  if (!*aResults)
+    return NS_ERROR_OUT_OF_MEMORY;
+  *aCount = count;
+
+  for (uint32_t i = 0; i < count; i++) {
+    (*aResults)[i] = ToNewUnicode(NS_ConvertUTF8toUTF16(aArray[i]));
+  }
+
+  return NS_OK;
 }
 
 static nsCString
@@ -77,7 +172,6 @@ nsPluginTag::nsPluginTag(nsPluginInfo* aPluginInfo,
     mFullPath(aPluginInfo->fFullPath),
     mVersion(aPluginInfo->fVersion),
     mLastModifiedTime(aLastModifiedTime),
-    mNiceFileName(),
     mCachedBlocklistState(nsIBlocklistService::STATE_NOT_BLOCKED),
     mCachedBlocklistStateValid(false),
     mIsFromExtension(fromExtension)
@@ -111,7 +205,6 @@ nsPluginTag::nsPluginTag(const char* aName,
     mFullPath(aFullPath),
     mVersion(aVersion),
     mLastModifiedTime(aLastModifiedTime),
-    mNiceFileName(),
     mCachedBlocklistState(nsIBlocklistService::STATE_NOT_BLOCKED),
     mCachedBlocklistStateValid(false),
     mIsFromExtension(fromExtension)
@@ -220,7 +313,7 @@ static nsresult ConvertToUTF8(nsIUnicodeDecoder *aUnicodeDecoder,
   NS_ENSURE_SUCCESS(rv, rv);
   buffer.SetLength(outUnicodeLen);
   CopyUTF16toUTF8(buffer, aString);
-  
+
   return NS_OK;
 }
 #endif
@@ -231,7 +324,7 @@ nsresult nsPluginTag::EnsureMembersAreUTF8()
   return NS_OK;
 #else
   nsresult rv;
-  
+
   nsCOMPtr<nsIPlatformCharset> pcs =
   do_GetService(NS_PLATFORMCHARSET_CONTRACTID, &rv);
   NS_ENSURE_SUCCESS(rv, rv);
@@ -313,6 +406,13 @@ nsPluginTag::IsActive()
   return IsEnabled() && !IsBlocklisted();
 }
 
+NS_IMETHODIMP
+nsPluginTag::GetActive(bool *aResult)
+{
+  *aResult = IsActive();
+  return NS_OK;
+}
+
 bool
 nsPluginTag::IsEnabled()
 {
@@ -330,7 +430,9 @@ nsPluginTag::GetDisabled(bool* aDisabled)
 bool
 nsPluginTag::IsBlocklisted()
 {
-  return GetBlocklistState() == nsIBlocklistService::STATE_BLOCKED;
+  uint32_t state;
+  return NS_SUCCEEDED(GetBlocklistState(&state))
+         && state == nsIBlocklistService::STATE_BLOCKED;
 }
 
 NS_IMETHODIMP
@@ -414,52 +516,19 @@ nsPluginTag::SetPluginState(PluginState state)
 NS_IMETHODIMP
 nsPluginTag::GetMimeTypes(uint32_t* aCount, char16_t*** aResults)
 {
-  uint32_t count = mMimeTypes.Length();
-  *aResults = static_cast<char16_t**>
-                         (nsMemory::Alloc(count * sizeof(**aResults)));
-  if (!*aResults)
-    return NS_ERROR_OUT_OF_MEMORY;
-  *aCount = count;
-
-  for (uint32_t i = 0; i < count; i++) {
-    (*aResults)[i] = ToNewUnicode(NS_ConvertUTF8toUTF16(mMimeTypes[i]));
-  }
-
-  return NS_OK;
+  return CStringArrayToXPCArray(mMimeTypes, aCount, aResults);
 }
 
 NS_IMETHODIMP
 nsPluginTag::GetMimeDescriptions(uint32_t* aCount, char16_t*** aResults)
 {
-  uint32_t count = mMimeDescriptions.Length();
-  *aResults = static_cast<char16_t**>
-                         (nsMemory::Alloc(count * sizeof(**aResults)));
-  if (!*aResults)
-    return NS_ERROR_OUT_OF_MEMORY;
-  *aCount = count;
-
-  for (uint32_t i = 0; i < count; i++) {
-    (*aResults)[i] = ToNewUnicode(NS_ConvertUTF8toUTF16(mMimeDescriptions[i]));
-  }
-
-  return NS_OK;
+  return CStringArrayToXPCArray(mMimeDescriptions, aCount, aResults);
 }
 
 NS_IMETHODIMP
 nsPluginTag::GetExtensions(uint32_t* aCount, char16_t*** aResults)
 {
-  uint32_t count = mExtensions.Length();
-  *aResults = static_cast<char16_t**>
-                         (nsMemory::Alloc(count * sizeof(**aResults)));
-  if (!*aResults)
-    return NS_ERROR_OUT_OF_MEMORY;
-  *aCount = count;
-
-  for (uint32_t i = 0; i < count; i++) {
-    (*aResults)[i] = ToNewUnicode(NS_ConvertUTF8toUTF16(mExtensions[i]));
-  }
-
-  return NS_OK;
+  return CStringArrayToXPCArray(mExtensions, aCount, aResults);
 }
 
 bool
@@ -509,25 +578,15 @@ nsCString nsPluginTag::GetNiceFileName() {
     return mNiceFileName;
   }
 
-  mNiceFileName.Assign(mFileName);
-  int32_t niceNameLength = mFileName.RFind(".");
-  NS_ASSERTION(niceNameLength != kNotFound, "mFileName doesn't have a '.'?");
-  while (niceNameLength > 0) {
-    char chr = mFileName[niceNameLength - 1];
-    if (!std::isalpha(chr))
-      niceNameLength--;
-    else
-      break;
-  }
-
-  // If it turns out that niceNameLength <= 0, we'll fall back and use the
-  // entire mFileName (which we've already taken care of, a few lines back)
-  if (niceNameLength > 0) {
-    mNiceFileName.Truncate(niceNameLength);
-  }
-
-  ToLowerCase(mNiceFileName);
+  mNiceFileName = MakeNiceFileName(mFileName);
   return mNiceFileName;
+}
+
+NS_IMETHODIMP
+nsPluginTag::GetNiceName(nsACString & aResult)
+{
+  aResult = GetNiceFileName();
+  return NS_OK;
 }
 
 void nsPluginTag::ImportFlagsToPrefs(uint32_t flags)
@@ -537,16 +596,20 @@ void nsPluginTag::ImportFlagsToPrefs(uint32_t flags)
   }
 }
 
-uint32_t
-nsPluginTag::GetBlocklistState()
+NS_IMETHODIMP
+nsPluginTag::GetBlocklistState(uint32_t *aResult)
 {
   if (mCachedBlocklistStateValid) {
-    return mCachedBlocklistState;
+    *aResult = mCachedBlocklistState;
+    return NS_OK;
   }
 
-  nsCOMPtr<nsIBlocklistService> blocklist = do_GetService("@mozilla.org/extensions/blocklist;1");
+  nsCOMPtr<nsIBlocklistService> blocklist =
+    do_GetService("@mozilla.org/extensions/blocklist;1");
+
   if (!blocklist) {
-    return nsIBlocklistService::STATE_NOT_BLOCKED;
+    *aResult = nsIBlocklistService::STATE_NOT_BLOCKED;
+    return NS_OK;
   }
 
   // The EmptyString()s are so we use the currently running application
@@ -554,13 +617,29 @@ nsPluginTag::GetBlocklistState()
   uint32_t state;
   if (NS_FAILED(blocklist->GetPluginBlocklistState(this, EmptyString(),
                                                    EmptyString(), &state))) {
-    return nsIBlocklistService::STATE_NOT_BLOCKED;
+    *aResult = nsIBlocklistService::STATE_NOT_BLOCKED;
+    return NS_OK;
   }
 
   MOZ_ASSERT(state <= UINT16_MAX);
   mCachedBlocklistState = (uint16_t) state;
   mCachedBlocklistStateValid = true;
-  return state;
+  *aResult = state;
+  return NS_OK;
+}
+
+bool
+nsPluginTag::HasMimeType(const nsACString & aMimeType) const
+{
+  return mMimeTypes.Contains(aMimeType,
+                             nsCaseInsensitiveCStringArrayComparator());
+}
+
+bool
+nsPluginTag::HasExtension(const nsACString & aExtension,
+                          nsACString & aMatchingType) const
+{
+  return SearchExtensions(mExtensions, mMimeTypes, aExtension, aMatchingType);
 }
 
 void
