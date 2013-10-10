@@ -118,6 +118,7 @@ WEBIDL_FILES = [
     'EventSource.webidl',
     'EventTarget.webidl',
     'Fetch.webidl',
+    'FetchEvent.webidl',
     'File.webidl',
     'FileList.webidl',
     'FileMode.webidl',
