@@ -987,21 +987,41 @@ nsPluginHost::GetPluginTagForType(const nsACString& aMimeType,
                                   uint32_t aExcludeFlags,
                                   nsIPluginTag** aResult)
 {
+  bool includeFake = !(aExcludeFlags & eExcludeFake);
   bool includeDisabled = !(aExcludeFlags & eExcludeDisabled);
+  nsFakePluginTag *fakeTag = nullptr;
+  nsPluginTag *nativeTag = nullptr;
 
-  nsPluginTag *tag = FindNativePluginForType(aMimeType, true);
-
-  // Prefer enabled, but select disabled if none is found
-  if (includeDisabled && !tag) {
-    tag = FindNativePluginForType(aMimeType, false);
+  // An enabled fake plugin with supersedeExisting will always be chosen
+  if (includeFake) {
+    fakeTag = FindFakePluginForType(aMimeType, true);
+    bool supersede = false;
+    if (fakeTag && NS_SUCCEEDED(fakeTag->GetSupersedeExisting(&supersede)) &&
+        supersede) {
+      NS_ADDREF(*aResult = fakeTag);
+      return NS_OK;
+    }
   }
 
-  if (!tag) {
-    return NS_ERROR_NOT_AVAILABLE;
+  // Otherwise see if we have a native plugin
+  nativeTag = FindNativePluginForType(aMimeType, true);
+
+  // If we found neither, try for disabled variants
+  if (includeDisabled && !nativeTag && !fakeTag) {
+    nativeTag = FindNativePluginForType(aMimeType, false);
+    fakeTag = includeFake ? FindFakePluginForType(aMimeType, false) : nullptr;
   }
 
-  NS_ADDREF(*aResult = tag);
-  return NS_OK;
+  // Prefer native
+  if (nativeTag) {
+    NS_ADDREF(*aResult = nativeTag);
+    return NS_OK;
+  } else if (fakeTag) {
+    NS_ADDREF(*aResult = fakeTag);
+    return NS_OK;
+  }
+
+  return NS_ERROR_NOT_AVAILABLE;
 }
 
 NS_IMETHODIMP
@@ -1072,7 +1092,10 @@ nsPluginHost::HavePluginForExtension(const nsACString & aExtension,
                                      PluginFilter aFilter)
 {
   bool checkEnabled = aFilter & eExcludeDisabled;
-  return FindNativePluginForExtension(aExtension, aMimeType, checkEnabled);
+  bool allowFake = !(aFilter & eExcludeFake);
+  return FindNativePluginForExtension(aExtension, aMimeType, checkEnabled) ||
+    (allowFake &&
+     FindFakePluginForExtension(aExtension, aMimeType, checkEnabled));
 }
 
 void

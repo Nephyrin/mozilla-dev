@@ -88,7 +88,8 @@ public:
   // Acts like a bitfield
   enum PluginFilter {
     eExcludeNone     = nsIPluginHost::EXCLUDE_NONE,
-    eExcludeDisabled = nsIPluginHost::EXCLUDE_DISABLED
+    eExcludeDisabled = nsIPluginHost::EXCLUDE_DISABLED,
+    eExcludeFake     = nsIPluginHost::EXCLUDE_FAKE
   };
   // FIXME comment about fake
   bool HavePluginForType(const nsACString & aMimeType,

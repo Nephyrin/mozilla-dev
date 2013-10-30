@@ -15,6 +15,7 @@
 #include "nsITimer.h"
 #include "nsString.h"
 
+class nsIURI;
 class nsPluginHost;
 struct PRLibrary;
 struct nsPluginInfo;
@@ -112,4 +113,58 @@ private:
   void FixupVersion();
 };
 
+// FIXME comment
+class nsFakePluginTag : public nsIFakePluginTag
+{
+public:
+  NS_DECL_ISUPPORTS
+  NS_DECL_NSIPLUGINTAG
+  NS_DECL_NSIFAKEPLUGINTAG
+
+  // enum for MIME_REGISTER_* values in nsIFakePluginTag
+  enum RegisterMode {
+    eRegisterMode_None      = MIME_REGISTER_NONE,
+    eRegisterMode_All       = MIME_REGISTER_ALL,
+    eRegisterMode_Unclaimed = MIME_REGISTER_UNCLAIMED,
+    eRegisterMode_Max
+  };
+
+  // FIXME don't allow last mime to be removed
+  // FIXME replace MIMEs?
+  nsFakePluginTag();
+
+  bool HasMimeType(const nsACString & aMimeType) const;
+  bool HasExtension(const nsACString & aExtension,
+                    /* out */ nsACString & aMatchingType) const;
+
+private:
+  virtual ~nsFakePluginTag();
+
+  // See nsIFakePluginTag for meaning of these
+  bool         mSupersedeExisting;
+  RegisterMode mRegisterMode;
+
+  // The URI of the page that will handle this
+  // FIXME sanity check these
+  nsCOMPtr<nsIURI>    mHandlerURI;
+
+  // All strings are UTF-8 unless otherwise specified
+  nsCString           mName;
+  nsCString           mDescription;
+  nsTArray<nsCString> mMimeTypes;
+  nsTArray<nsCString> mMimeDescriptions;
+  nsTArray<nsCString> mExtensions;
+
+  nsCString     mFilename;
+  nsCString     mFullPath;
+  nsCString     mVersion;
+  nsCString     mNiceName;
+
+  // FIXME
+  nsPluginTag::PluginState mState;
+};
+
 #endif // nsPluginTags_h_
+
+
+

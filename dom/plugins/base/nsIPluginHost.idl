@@ -12,13 +12,6 @@
   "@mozilla.org/plugin/host;1"
 %}
 
-[scriptable, uuid(f89e7679-0adf-4a30-bda9-1afe1ee270d6)]
-interface nsIPluginPlayPreviewInfo : nsISupports
-{
-  readonly attribute AUTF8String mimeType;
-  readonly attribute boolean     ignoreCTP;
-  readonly attribute AUTF8String redirectURL;
-};
 
 [scriptable, uuid(d7d5b2e0-105b-4c9d-8558-b6b31f28b7df)]
 interface nsIPluginHost : nsISupports
@@ -48,6 +41,7 @@ interface nsIPluginHost : nsISupports
    */
   const uint32_t EXCLUDE_NONE     = 0;
   const uint32_t EXCLUDE_DISABLED = 1 << 0;
+  const uint32_t EXCLUDE_FAKE     = 1 << 1;
 
   /*
    * Clear site data for a given plugin.

@@ -5,7 +5,10 @@
 
 #include "nsISupports.idl"
 
-[scriptable, uuid(aca7bd99-e26c-4d66-b5f8-ab257dbe9754)]
+interface nsIURI;
+
+// FIXME check all UUIDs
+[scriptable, uuid(cb8f3d31-d1e8-4806-96d9-e21c6cc0f7ec)]
 interface nsIPluginTag : nsISupports
 {
   // enabledState is stored as one of the following as an integer in prefs,
@@ -14,19 +17,22 @@ interface nsIPluginTag : nsISupports
   const unsigned long STATE_CLICKTOPLAY = 1;
   const unsigned long STATE_ENABLED = 2;
 
-  readonly attribute AUTF8String description;
-  readonly attribute AUTF8String filename;
-  readonly attribute AUTF8String fullpath;
-  readonly attribute AUTF8String version;
-  readonly attribute AUTF8String name;
+  // These are effectively readonly (the setters throw), but may be settable on
+  // child interfaces
+  /* readonly */ attribute AUTF8String description;
+  /* readonly */ attribute AUTF8String filename;
+  /* readonly */ attribute AUTF8String fullpath;
+  /* readonly */ attribute AUTF8String version;
+  /* readonly */ attribute AUTF8String name;
 
   // The 'nice' name of this plugin, e.g. 'flash' 'java'
-  readonly attribute AUTF8String niceName;
+  /* readonly */ attribute AUTF8String niceName;
 
   /**
    * true only if this plugin is "hardblocked" and cannot be enabled.
    */
-  readonly attribute boolean blocklisted;
+  // FIXME QI to fakePluginTag possible
+  readonly attribute boolean blocklisted; // FIXME implement missing + tests
 
   // If this plugin is capable of being used (not disabled, blocklisted, etc)
   readonly attribute boolean active;
@@ -48,4 +54,54 @@ interface nsIPluginTag : nsISupports
   void getExtensions([optional] out unsigned long aCount,
                      [retval, array, size_is(aCount)]
                      out wstring aResults);
+};
+
+[scriptable, uuid(6d22c968-226d-4156-b230-da6ad6bbf6e8)]
+interface nsIFakePluginTag : nsIPluginTag
+{
+  // constants for registerMode
+  //
+  // Never register any mimeTypes. Rely solely on supersedeExisting to supersede
+  // MIME types already registered to other plugins.
+  const uint16_t MIME_REGISTER_NONE = 0;
+  // Always register all of our mimeTypes. If supersedeExisting is true, they
+  // will take precedence over real plugins, including in navigator.mimeTypes.
+  const uint16_t MIME_REGISTER_ALL = 1;
+  // Only register ourselves as a plugin if we have mimeTypes not claimed by any
+  // other plugin, and only expose those mimeTypes.
+  const uint16_t MIME_REGISTER_UNCLAIMED = 2;
+
+  void addMimeType(in AUTF8String mimeType,
+                   [optional] in AUTF8String description,
+                   [optional] in AUTF8String extensions);
+  void removeMimeType(in AUTF8String mimeType);
+
+  // The URI that should be loaded into the tag (as a frame) to handle the
+  // plugin. Note that the original data/src value for the plugin is not loaded
+  // and will need to be requested by the handler via XHR or similar if desired.
+  attribute nsIURI handlerURI;
+
+  // FIXME need to invalidate plugins array on change of parameters
+  // FIXME what do we do about 'blocklisted' and the like?
+
+  // How we should go about registering our MIME types, see constants above.
+  attribute uint16_t registerMode;
+
+  // If true, we will be used in favor of a real plugin for all mimeTypes we
+  // support.
+  // NOTE that if REGISTER_NONE is used it is possible that no plugin will claim
+  //      a MIME type we support, and said type will never reach plugin code to
+  //      be superseded.
+  attribute boolean supersedeExisting;
+
+  // These can be filled by the creator to provide the values that will appear
+  // in navigator.mimeTypes and similar
+  /*attribute AUTF8String description;
+  attribute AUTF8String filename;
+  attribute AUTF8String fullpath;
+  attribute AUTF8String version;
+  attribute AUTF8String name;*/ // FIXME DOC
+
+  // FIXME note changing this later causes weirdness
+  // attribute AUTF8String niceName;
 };

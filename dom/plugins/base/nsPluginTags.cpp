@@ -16,6 +16,7 @@
 #include "nsPluginLogging.h"
 #include "nsNPAPIPlugin.h"
 #include "mozilla/Preferences.h"
+#include "nsNetUtil.h"
 #include <cctype>
 #include "mozilla/dom/EncodingUtils.h"
 
@@ -37,7 +38,7 @@ inline char* new_str(const char* str)
 {
   if (str == nullptr)
     return nullptr;
-  
+
   char* result = new char[strlen(str) + 1];
   if (result != nullptr)
     return strcpy(result, str);
@@ -406,6 +407,15 @@ nsPluginTag::GetName(nsACString& aName)
   return NS_OK;
 }
 
+// These are readonly for native tags, but writable on other nsIPluginTag types
+#define _NOIMPL(spec) NS_IMETHODIMP spec { return NS_ERROR_NOT_IMPLEMENTED; }
+_NOIMPL(nsPluginTag::SetDescription(const nsACString &))
+_NOIMPL(nsPluginTag::SetFilename(const nsACString &))
+_NOIMPL(nsPluginTag::SetFullpath(const nsACString &))
+_NOIMPL(nsPluginTag::SetVersion(const nsACString &))
+_NOIMPL(nsPluginTag::SetName(const nsACString &))
+_NOIMPL(nsPluginTag::SetNiceName(const nsACString &))
+
 bool
 nsPluginTag::IsActive()
 {
@@ -665,4 +675,301 @@ nsPluginTag::GetLastModifiedTime(PRTime* aLastModifiedTime)
 bool nsPluginTag::IsFromExtension() const
 {
   return mIsFromExtension;
+}
+
+// FIXME comment/delimiter
+// FIXME default values
+nsFakePluginTag::nsFakePluginTag()
+  : mSupersedeExisting(false),
+    mRegisterMode(eRegisterMode_All),
+    // FIXME save state in a pref? Would need a fixed nicename...
+    mState(nsPluginTag::ePluginState_Disabled)
+{}
+
+nsFakePluginTag::~nsFakePluginTag() {}
+
+NS_IMPL_ISUPPORTS(nsFakePluginTag, nsIFakePluginTag, nsIPluginTag)
+
+// FIXME empty objects need to be dropped from nsPluginHost and re-added or
+//        something. Split create and register steps?
+NS_IMETHODIMP
+nsFakePluginTag::AddMimeType(/* utf-8 */ const nsACString & aMimeType,
+                             /* utf-8, optional */ const nsACString & aDescription,
+                             /* utf-8, optional */ const nsACString & aExtensions)
+{
+  // FIXME UpdateRegistration()
+  // FIXME prevent conflicts with other fake plugins
+  nsTArray<nsCString>::index_type index =
+    mMimeTypes.IndexOf(aMimeType, 0, nsCaseInsensitiveCStringArrayComparator());
+
+  if (index != nsTArray<nsCString>::NoIndex) {
+    // Update existing entry if values were given
+    if (!aDescription.IsVoid()) {
+      mMimeDescriptions[index] = aDescription;
+    }
+    if (!aExtensions.IsVoid()) {
+      mExtensions[index] = aExtensions;
+    }
+  } else {
+    // New entry
+    nsCString lowerMime(aMimeType);
+    ToLowerCase(lowerMime);
+    mMimeTypes.AppendElement(lowerMime);
+    mMimeDescriptions.AppendElement(aDescription);
+    mExtensions.AppendElement(aExtensions);
+  }
+
+  return NS_OK;
+}
+
+bool
+nsFakePluginTag::HasMimeType(const nsACString & aMimeType) const
+{
+  return mMimeTypes.Contains(aMimeType,
+                             nsCaseInsensitiveCStringArrayComparator());
+}
+
+bool
+nsFakePluginTag::HasExtension(const nsACString & aExtension,
+                              nsACString & aMatchingType) const
+{
+  return SearchExtensions(mExtensions, mMimeTypes, aExtension, aMatchingType);
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::RemoveMimeType(/* utf-8 */ const nsACString & aMimeType)
+{
+  nsTArray<nsCString>::index_type index =
+    mMimeTypes.IndexOf(aMimeType, 0, nsCaseInsensitiveCStringArrayComparator());
+  NS_ENSURE_TRUE(index != nsTArray<nsCString>::NoIndex, NS_ERROR_UNEXPECTED);
+
+  // FIXME UpdateRegistration()
+  mMimeTypes.RemoveElementAt(index);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetHandlerURI(nsIURI **aResult)
+{
+  NS_IF_ADDREF(*aResult = mHandlerURI);
+  return NS_OK;
+}
+
+
+
+NS_IMETHODIMP
+nsFakePluginTag::SetHandlerURI(nsIURI *aURI)
+{
+  mHandlerURI = aURI;
+  return NS_OK;
+}
+
+// TODO when we change register modes we need to determine if we register/unregister things
+NS_IMETHODIMP
+nsFakePluginTag::GetRegisterMode(uint16_t *aResult)
+{
+  *aResult = mRegisterMode;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::SetRegisterMode(uint16_t aRegisterMode)
+{
+  if (aRegisterMode > eRegisterMode_Max) {
+    return NS_ERROR_UNEXPECTED;
+  }
+  // FIXME UpdateRegistration
+  mRegisterMode = (RegisterMode)aRegisterMode;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetSupersedeExisting(bool *aResult)
+{
+  *aResult = mSupersedeExisting;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::SetSupersedeExisting(bool aSupersedeExisting)
+{
+  // FIXME UpdateR
+  mSupersedeExisting = aSupersedeExisting;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetDescription(/* utf-8 */ nsACString & aResult)
+{
+  aResult = mDescription;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::SetDescription(/* utf-8 */ const nsACString & aDescription)
+{
+  // FIXME UpdateR
+  mDescription = aDescription;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetFilename(/* utf-8 */ nsACString & aResult)
+{
+  aResult = mFilename;
+  return NS_OK;
+}
+NS_IMETHODIMP
+nsFakePluginTag::SetFilename(/* utf-8 */ const nsACString & aFilename)
+{
+  mFilename = aFilename;
+  // FIXME update reg
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetFullpath(/* utf-8 */ nsACString & aResult)
+{
+  aResult = mFullPath;
+  return NS_OK;
+}
+NS_IMETHODIMP
+nsFakePluginTag::SetFullpath(/* utf-8 */ const nsACString & aFullpath)
+{
+  mFullPath = aFullpath;
+  // FIXME Update
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetVersion(/* utf-8 */ nsACString & aResult)
+{
+  aResult = mVersion;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::SetVersion(/* utf-8 */ const nsACString & aVersion)
+{
+  mVersion = aVersion;
+  return NS_OK; // FIXME update
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetName(/* utf-8 */ nsACString & aResult)
+{
+  aResult = mName;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::SetName(/* utf-8 */ const nsACString & aName)
+{
+  mName = aName;
+  // FIXME update
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetNiceName(/* utf-8 */ nsACString & aResult)
+{
+  // We don't try to mimic the special-cased flash/java names if the fake plugin
+  // claims one of their MIME types, but do allow directly setting niceName if
+  // emulating those is desired.
+  if (!mNiceName.Length() && mFilename.Length()) {
+    aResult = MakeNiceFileName(mFilename);
+  } else {
+    aResult = mNiceName;
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::SetNiceName(/* utf-8 */ const nsACString & aNiceName)
+{
+  mNiceName = aNiceName;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetBlocklistState(uint32_t *aResult)
+{
+  // Fake tags don't currently support blocklisting
+  *aResult = nsIBlocklistService::STATE_NOT_BLOCKED;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetBlocklisted(bool *aBlocklisted)
+{
+  // Fake tags can't be blocklisted
+  *aBlocklisted = false;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetDisabled(bool* aDisabled)
+{
+  *aDisabled = (mState != nsPluginTag::ePluginState_Enabled &&
+                mState != nsPluginTag::ePluginState_Clicktoplay);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetClicktoplay(bool *aClicktoplay)
+{
+  *aClicktoplay = (mState == nsPluginTag::ePluginState_Clicktoplay);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetEnabledState(uint32_t *aEnabledState)
+{
+  *aEnabledState = (uint32_t)mState;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::SetEnabledState(uint32_t aEnabledState)
+{
+  // There are static asserts above enforcing that this enum matches
+  mState = (nsPluginTag::PluginState)aEnabledState;
+  // FIXME update
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetMimeTypes(uint32_t* aCount, char16_t*** aResults)
+{
+  return CStringArrayToXPCArray(mMimeTypes, aCount, aResults);
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetMimeDescriptions(uint32_t* aCount, char16_t*** aResults)
+{
+  return CStringArrayToXPCArray(mMimeDescriptions, aCount, aResults);
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetExtensions(uint32_t* aCount, char16_t*** aResults)
+{
+  return CStringArrayToXPCArray(mExtensions, aCount, aResults);
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetActive(bool *aResult)
+{
+  // Fake plugins can't be blocklisted, so this is just !Disabled
+  *aResult = (mState == nsPluginTag::ePluginState_Enabled ||
+              mState == nsPluginTag::ePluginState_Clicktoplay);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsFakePluginTag::GetLastModifiedTime(PRTime* aLastModifiedTime)
+{
+  // FIXME
+  MOZ_ASSERT(aLastModifiedTime);
+  *aLastModifiedTime = 0;
+  return NS_OK;
 }
