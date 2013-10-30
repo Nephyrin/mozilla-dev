@@ -24,7 +24,6 @@
 #include "nsTObserverArray.h"
 #include "nsITimer.h"
 #include "nsPluginTags.h"
-#include "nsPluginPlayPreviewInfo.h"
 #include "nsIEffectiveTLDService.h"
 #include "nsIIDNService.h"
 #include "nsCRT.h"
@@ -64,6 +63,7 @@ class nsPluginHost : public nsIPluginHost,
                      public nsSupportsWeakReference
 {
   friend class nsPluginTag;
+  friend class nsFakePluginTag;
   virtual ~nsPluginHost();
 
 public:
@@ -226,8 +226,14 @@ private:
   nsPluginTag*
   FindPreferredPlugin(const InfallibleTArray<nsPluginTag*>& matches);
 
-  // Return an nsPluginTag for this type, if any.  If aCheckEnabled is
-  // true, only enabled plugins will be returned.
+  // FIXME needed for extension?
+  nsFakePluginTag* FindFakePluginForType(const nsACString & aMimeType,
+                                         bool aCheckEnabled);
+
+  nsFakePluginTag* FindFakePluginForExtension(const nsACString & aExtension,
+                                              /* out */ nsACString & aMimeType,
+                                              bool aCheckEnabled);
+
   nsPluginTag* FindNativePluginForType(const nsACString & aMimeType,
                                        bool aCheckEnabled);
 
@@ -243,8 +249,10 @@ private:
 
   // FIXME revisit, no ns prefix
   // Registers or unregisters the given mime type with the category manager
-  // (performs no checks - see UpdateCategoryManager)
-  enum nsRegisterType { ePluginRegister, ePluginUnregister };
+  enum nsRegisterType { ePluginRegister,
+                        ePluginUnregister,
+                        // Checks if this type should still be registered first
+                        ePluginMaybeUnregister };
   void RegisterWithCategoryManager(nsCString &aMimeType, nsRegisterType aType);
 
   nsresult
@@ -288,7 +296,9 @@ private:
   nsRefPtr<nsPluginTag> mPlugins;
   nsRefPtr<nsPluginTag> mCachedPlugins;
   nsRefPtr<nsInvalidPluginTag> mInvalidPlugins;
-  nsTArray< nsRefPtr<nsPluginPlayPreviewInfo> > mPlayPreviewMimeTypes;
+
+  nsTArray< nsRefPtr<nsFakePluginTag> > mFakePlugins;
+
   bool mPluginsLoaded;
 
   // set by pref plugin.override_internal_types

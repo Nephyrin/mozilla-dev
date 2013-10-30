@@ -17,6 +17,7 @@
 #include "nsNPAPIPluginInstance.h"
 #include "nsPluginInstanceOwner.h"
 #include "nsObjectLoadingContent.h"
+#include "nsIPluginTag.h"
 #include "nsIHTTPHeaderListener.h"
 #include "nsIHttpHeaderVisitor.h"
 #include "nsIObserverService.h"
@@ -979,7 +980,9 @@ nsPluginHost::HavePluginForType(const nsACString & aMimeType,
                                 PluginFilter aFilter)
 {
   bool checkEnabled = aFilter & eExcludeDisabled;
-  return FindNativePluginForType(aMimeType, checkEnabled);
+  bool allowFake = !(aFilter & eExcludeFake);
+  return FindNativePluginForType(aMimeType, checkEnabled) ||
+         (allowFake && FindFakePluginForType(aMimeType, checkEnabled));
 }
 
 NS_IMETHODIMP
@@ -1052,6 +1055,7 @@ nsPluginHost::GetBlocklistStateForType(const char *aMimeType,
   return tag->GetBlocklistState(aState);
 }
 
+// FIXME for fake
 NS_IMETHODIMP
 nsPluginHost::GetPermissionStringForType(const nsACString &aMimeType,
                                          uint32_t aExcludeFlags,
@@ -1105,6 +1109,19 @@ nsPluginHost::GetPlugins(nsTArray<nsCOMPtr<nsIPluginTag> >& aPluginArray)
 
   LoadPlugins();
 
+  // Append fake plugins with the supersede flag, then normal plugins, then fake
+  // plugins sans supersede
+
+  uint32_t numFake = mFakePlugins.Length();
+  for (uint32_t i = 0; i < numFake; i++) {
+    bool supersede;
+    if (NS_SUCCEEDED(mFakePlugins[i]->GetSupersedeExisting(&supersede))
+        && supersede) {
+      aPluginArray.AppendElement(mFakePlugins[i]);
+    }
+  }
+
+  // Regular plugins
   nsPluginTag* plugin = mPlugins;
   while (plugin != nullptr) {
     if (plugin->IsEnabled()) {
@@ -1112,14 +1129,26 @@ nsPluginHost::GetPlugins(nsTArray<nsCOMPtr<nsIPluginTag> >& aPluginArray)
     }
     plugin = plugin->mNext;
   }
+
+  // FIXME honor register mode, including unclaimed.
+  // Fake plugins without supersede
+  for (uint32_t i = 0; i < numFake; i++) {
+    bool supersede;
+    if (NS_SUCCEEDED(mFakePlugins[i]->GetSupersedeExisting(&supersede))
+        && !supersede) {
+      aPluginArray.AppendElement(mFakePlugins[i]);
+    }
+  }
 }
 
+// FIXME Check users for order of fake v non-fake
 NS_IMETHODIMP
 nsPluginHost::GetPluginTags(uint32_t* aPluginCount, nsIPluginTag*** aResults)
 {
   LoadPlugins();
 
   uint32_t count = 0;
+  uint32_t fakeCount = mFakePlugins.Length();
   nsRefPtr<nsPluginTag> plugin = mPlugins;
   while (plugin != nullptr) {
     count++;
@@ -1127,17 +1156,22 @@ nsPluginHost::GetPluginTags(uint32_t* aPluginCount, nsIPluginTag*** aResults)
   }
 
   *aResults = static_cast<nsIPluginTag**>
-                         (nsMemory::Alloc(count * sizeof(**aResults)));
+                    (nsMemory::Alloc((fakeCount + count) * sizeof(**aResults)));
   if (!*aResults)
     return NS_ERROR_OUT_OF_MEMORY;
 
-  *aPluginCount = count;
+  *aPluginCount = count + fakeCount;
 
   plugin = mPlugins;
   for (uint32_t i = 0; i < count; i++) {
     (*aResults)[i] = plugin;
     NS_ADDREF((*aResults)[i]);
     plugin = plugin->mNext;
+  }
+
+  for (uint32_t i = 0; i < fakeCount; i++) {
+    (*aResults)[i + count] = mFakePlugins[i];
+    NS_ADDREF((*aResults)[i + count]);
   }
 
   return NS_OK;
@@ -1167,6 +1201,47 @@ nsPluginHost::FindPreferredPlugin(const InfallibleTArray<nsPluginTag*>& matches)
   return preferredPlugin;
 }
 
+nsFakePluginTag*
+nsPluginHost::FindFakePluginForExtension(const nsACString & aExtension,
+                                         /* out */ nsACString & aMimeType,
+                                         bool aCheckEnabled)
+{
+  if (!aExtension.Length()) {
+    return nullptr;
+  }
+
+  int32_t numFakePlugins = mFakePlugins.Length();
+  for (int32_t i = 0; i < numFakePlugins; i++) {
+    nsFakePluginTag *plugin = mFakePlugins[i];
+    bool active;
+    if ((!aCheckEnabled
+         || (NS_SUCCEEDED(plugin->GetActive(&active)) && active))
+        && plugin->HasExtension(aExtension, aMimeType)) {
+      return plugin;
+    }
+  }
+
+  return nullptr;
+}
+
+nsFakePluginTag*
+nsPluginHost::FindFakePluginForType(const nsACString & aMimeType,
+                                    bool aCheckEnabled)
+{
+  int32_t numFakePlugins = mFakePlugins.Length();
+  for (int32_t i = 0; i < numFakePlugins; i++) {
+    nsFakePluginTag *plugin = mFakePlugins[i];
+    bool active;
+    if ((!aCheckEnabled ||
+         (NS_SUCCEEDED(plugin->GetActive(&active)) && active)) &&
+        plugin->HasMimeType(aMimeType)) {
+      return plugin;
+    }
+  }
+
+  return nullptr;
+}
+
 nsPluginTag*
 nsPluginHost::FindNativePluginForType(const nsACString & aMimeType,
                                       bool aCheckEnabled)
@@ -1191,6 +1266,7 @@ nsPluginHost::FindNativePluginForType(const nsACString & aMimeType,
   return FindPreferredPlugin(matchingPlugins);
 }
 
+// FIXME fake
 nsPluginTag*
 nsPluginHost::FindNativePluginForExtension(const nsACString & aExtension,
                                            /* out */ nsACString & aMimeType,
@@ -1399,55 +1475,45 @@ nsPluginHost::EnumerateSiteData(const nsACString& domain,
 }
 
 NS_IMETHODIMP
-nsPluginHost::RegisterPlayPreviewMimeType(const nsACString& mimeType,
-                                          bool ignoreCTP,
-                                          const nsACString& redirectURL)
+nsPluginHost::CreateFakePlugin(/* utf-8 */ const nsACString & aHandlerURI,
+                               nsIFakePluginTag **aResult)
 {
-  nsAutoCString mt(mimeType);
-  nsAutoCString url(redirectURL);
-  if (url.Length() == 0) {
-    // using default play preview iframe URL, if redirectURL is not specified
-    url.AssignLiteral("data:application/x-moz-playpreview;,");
-    url.Append(mimeType);
-  }
+  nsRefPtr<nsFakePluginTag> newTag = new nsFakePluginTag();
 
-  nsRefPtr<nsPluginPlayPreviewInfo> playPreview =
-    new nsPluginPlayPreviewInfo(mt.get(), ignoreCTP, url.get());
-  mPlayPreviewMimeTypes.AppendElement(playPreview);
-  return NS_OK;
-}
+  if (!aHandlerURI.IsVoid()) {
+    nsCOMPtr<nsIURI> newURI;
+    nsresult rv = NS_NewURI(getter_AddRefs(newURI), aHandlerURI);
 
-NS_IMETHODIMP
-nsPluginHost::UnregisterPlayPreviewMimeType(const nsACString& mimeType)
-{
-  nsAutoCString mimeTypeToRemove(mimeType);
-  for (uint32_t i = mPlayPreviewMimeTypes.Length(); i > 0; i--) {
-    nsRefPtr<nsPluginPlayPreviewInfo> pp = mPlayPreviewMimeTypes[i - 1];
-    if (PL_strcasecmp(pp.get()->mMimeType.get(), mimeTypeToRemove.get()) == 0) {
-      mPlayPreviewMimeTypes.RemoveElementAt(i - 1);
-      break;
+    if (NS_SUCCEEDED(rv)) {
+      rv = newTag->SetHandlerURI(newURI);
     }
+
+    NS_ENSURE_SUCCESS(rv, rv);
   }
+
+  newTag.forget(aResult);
   return NS_OK;
 }
 
+// FIXME This call is probably unneeded
 NS_IMETHODIMP
-nsPluginHost::GetPlayPreviewInfo(const nsACString& mimeType,
-                                 nsIPluginPlayPreviewInfo** aResult)
+nsPluginHost::GetFakePlugin(const nsACString & aMimeType,
+                            nsIFakePluginTag** aResult)
 {
-  nsAutoCString mimeTypeToFind(mimeType);
-  for (uint32_t i = 0; i < mPlayPreviewMimeTypes.Length(); i++) {
-    nsRefPtr<nsPluginPlayPreviewInfo> pp = mPlayPreviewMimeTypes[i];
-    if (PL_strcasecmp(pp.get()->mMimeType.get(), mimeTypeToFind.get()) == 0) {
-      *aResult = new nsPluginPlayPreviewInfo(pp.get());
-      NS_ADDREF(*aResult);
+  return NS_ERROR_NOT_IMPLEMENTED;
+
+  for (uint32_t i = 0; i < mFakePlugins.Length(); i++) {
+    if (mFakePlugins[i]->HasMimeType(aMimeType)) {
+      NS_ADDREF(*aResult = mFakePlugins[i].get());
       return NS_OK;
     }
   }
+
   *aResult = nullptr;
   return NS_ERROR_NOT_AVAILABLE;
 }
 
+// FIXME fake
 NS_IMETHODIMP
 nsPluginHost::ClearSiteData(nsIPluginTag* plugin, const nsACString& domain,
                             uint64_t flags, int64_t maxAge)
@@ -1502,6 +1568,7 @@ nsPluginHost::ClearSiteData(nsIPluginTag* plugin, const nsACString& domain,
   return NS_OK;
 }
 
+// FIXME fake
 NS_IMETHODIMP
 nsPluginHost::SiteHasData(nsIPluginTag* plugin, const nsACString& domain,
                           bool* result)
@@ -1578,6 +1645,13 @@ nsPluginHost::IsSpecialPluginType(const nsACString & aMIMEType)
 bool
 nsPluginHost::IsLiveTag(nsIPluginTag* aPluginTag)
 {
+  uint32_t fakeCount = mFakePlugins.Length();
+  for (uint32_t i = 0; i < fakeCount; i++) {
+    if (mFakePlugins[i] == aPluginTag) {
+      return true;
+    }
+  }
+
   nsPluginTag* tag;
   for (tag = mPlugins; tag; tag = tag->mNext) {
     if (tag == aPluginTag) {
@@ -1587,6 +1661,7 @@ nsPluginHost::IsLiveTag(nsIPluginTag* aPluginTag)
   return false;
 }
 
+// FIXME issue with fake?
 nsPluginTag*
 nsPluginHost::HaveSamePlugin(const nsPluginTag* aPluginTag)
 {
@@ -1598,6 +1673,7 @@ nsPluginHost::HaveSamePlugin(const nsPluginTag* aPluginTag)
   return nullptr;
 }
 
+// FIXME fake (what is this for)
 nsPluginTag*
 nsPluginHost::FirstPluginWithPath(const nsCString& path)
 {
@@ -1918,6 +1994,7 @@ nsresult nsPluginHost::ScanPluginsDirectory(nsIFile *pluginsDir,
       mPlugins = pluginTag;
     }
 
+    // FIXME split out so fake can use
     if (pluginTag->IsActive()) {
       nsAdoptingCString disableFullPage =
         Preferences::GetCString(kPrefDisableFullPage);
@@ -2164,6 +2241,7 @@ nsresult nsPluginHost::FindPlugins(bool aCreatePluginList, bool * aPluginsChange
   return NS_OK;
 }
 
+// FIXME for fake?
 void
 nsPluginHost::UpdatePluginInfo(nsPluginTag* aPluginTag)
 {
@@ -2185,6 +2263,7 @@ nsPluginHost::UpdatePluginInfo(nsPluginTag* aPluginTag)
     if (IsTypeInList(aPluginTag->mMimeTypes[i], disableFullPage)) {
       shouldRegister = ePluginUnregister;
     } else {
+      // FIXME
       nsPluginTag *plugin = FindNativePluginForType(aPluginTag->mMimeTypes[i],
                                                     true);
       shouldRegister = plugin ? ePluginRegister : ePluginUnregister;
@@ -2235,6 +2314,15 @@ nsPluginHost::RegisterWithCategoryManager(nsCString &aMimeType,
                              mOverrideInternalTypes,
                              nullptr);
   } else {
+    if (aType == ePluginMaybeUnregister) {
+      // Bail out if this type is still used by an enabled plugin
+      if (HavePluginForType(aMimeType)) {
+        return;
+      }
+    } else {
+      MOZ_ASSERT(aType == ePluginUnregister, "Unknown nsRegisterType");
+    }
+
     // Only delete the entry if a plugin registered for it
     nsXPIDLCString value;
     nsresult rv = catMan->GetCategoryEntry("Gecko-Content-Viewers",

@@ -13,11 +13,11 @@
 %}
 
 
-[scriptable, uuid(d7d5b2e0-105b-4c9d-8558-b6b31f28b7df)]
+[scriptable, uuid(2812c7cf-2fa3-4b53-a10a-394dbae2fbf1)]
 interface nsIPluginHost : nsISupports
 {
   /**
-   * Causes the plugins directory to be searched again for new plugin 
+   * Causes the plugins directory to be searched again for new plugin
    * libraries.
    */
   void reloadPlugins();
@@ -78,6 +78,7 @@ interface nsIPluginHost : nsISupports
    */
   boolean siteHasData(in nsIPluginTag plugin, in AUTF8String domain);
 
+  // FIXME doc
   /**
    * Registers the play preview plugin mode for specific mime type
    *
@@ -87,18 +88,14 @@ interface nsIPluginHost : nsISupports
                        presence in the address bar.
    * @param redirectURL: specifies url for the overlay iframe
    */
-  void registerPlayPreviewMimeType(in AUTF8String mimeType,
-                                   [optional] in boolean ignoreCTP,
-                                   [optional] in AUTF8String redirectURL);
-
-  void unregisterPlayPreviewMimeType(in AUTF8String mimeType);
-
-  nsIPluginPlayPreviewInfo getPlayPreviewInfo(in AUTF8String mimeType);
+  nsIFakePluginTag createFakePlugin([optional] in AUTF8String aHandlerURI);
+  nsIFakePluginTag getFakePlugin(in AUTF8String mimeType);
 
  // FIXME doc below four
   ACString getPermissionStringForType(in AUTF8String mimeType,
                                       [optional] in uint32_t excludeFlags);
 
+  // FIXME comment about fake plugins ^v (and implement)
   /**
    * Get the nsIPluginTag for this MIME type. This method works with both
    * enabled and disabled/blocklisted plugins, but an enabled plugin will
