@@ -852,7 +852,8 @@ nsresult nsPluginInstanceOwner::EnsureCachedAttrParamArrays()
   // Check if we are java for special codebase handling
   const char* mime = nullptr;
   bool isJava = NS_SUCCEEDED(mInstance->GetMIMEType(&mime)) && mime &&
-                nsPluginHost::IsJavaMIMEType(mime);
+                nsPluginHost::IsSpecialPluginType(nsDependentCString(mime))
+                == nsPluginHost::eSpecialPluginTypeJava;
 
   // now, we need to find all the PARAM tags that are children of us
   // however, be careful not to include any PARAMs that don't have us

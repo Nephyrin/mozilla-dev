@@ -567,7 +567,9 @@ nsresult nsNPAPIPluginInstance::SetWindow(NPWindow* window)
 #if MOZ_WIDGET_GTK
   // bug 108347, flash plugin on linux doesn't like window->width <=
   // 0, but Java needs wants this call.
-  if (!nsPluginHost::IsJavaMIMEType(mMIMEType) && window->type == NPWindowTypeWindow &&
+  if (nsPluginHost::IsSpecialPluginType(nsDependentCString(mMIMEType))
+      != nsPluginHost::eSpecialPluginTypeJava &&
+      window->type == NPWindowTypeWindow &&
       (window->width <= 0 || window->height <= 0)) {
     return NS_OK;
   }

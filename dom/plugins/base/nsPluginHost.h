@@ -172,8 +172,14 @@ public:
   // Always returns true if plugin.allowed_types is not set
   static bool IsTypeWhitelisted(const char *aType);
 
-  // checks whether aType is a type typically handled by the java plugin
-  static bool IsJavaMIMEType(const char *aType);
+  // checks whether aType is a type that has special handling
+  enum SpecialPluginType { eSpecialPluginTypeNone, // No special handling
+                           // Informs some decisions about OOP and quirks
+                           eSpecialPluginTypeFlash,
+                           // Binds to the <applet> tag, has various special
+                           // rules around opening channels, codebase, ...
+                           eSpecialPluginTypeJava };
+  static SpecialPluginType IsSpecialPluginType(const nsACString & aMIMEType);
 
   static nsresult PostPluginUnloadEvent(PRLibrary* aLibrary);
 

@@ -1533,19 +1533,22 @@ nsPluginHost::SiteHasData(nsIPluginTag* plugin, const nsACString& domain,
   return NS_OK;
 }
 
-bool nsPluginHost::IsJavaMIMEType(const char* aType)
+nsPluginHost::SpecialPluginType
+nsPluginHost::IsSpecialPluginType(const nsACString & aMIMEType)
 {
   // The java mime pref may well not be one of these,
   // e.g. application/x-java-test used in the test suite
   nsAdoptingCString javaMIME = Preferences::GetCString(kPrefJavaMIME);
-  return aType &&
-    (javaMIME.EqualsIgnoreCase(aType) ||
-     (0 == PL_strncasecmp(aType, "application/x-java-vm",
-                          sizeof("application/x-java-vm") - 1)) ||
-     (0 == PL_strncasecmp(aType, "application/x-java-applet",
-                          sizeof("application/x-java-applet") - 1)) ||
-     (0 == PL_strncasecmp(aType, "application/x-java-bean",
-                          sizeof("application/x-java-bean") - 1)));
+  if (aMIMEType.LowerCaseEqualsASCII(javaMIME) ||
+      aMIMEType.LowerCaseEqualsASCII("application/x-java-vm") ||
+      aMIMEType.LowerCaseEqualsASCII("application/x-java-applet") ||
+      aMIMEType.LowerCaseEqualsASCII("application/x-java-bean")) {
+      return eSpecialPluginTypeJava;
+  } else if (aMIMEType.LowerCaseEqualsASCII("application/x-shockwave-flash")) {
+    return eSpecialPluginTypeFlash;
+  }
+
+  return eSpecialPluginTypeNone;
 }
 
 // Check whether or not a tag is a live, valid tag, and that it's loaded.

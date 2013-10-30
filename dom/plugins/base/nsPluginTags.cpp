@@ -248,10 +248,16 @@ void nsPluginTag::InitMime(const char* const* aMimeTypes,
     }
 
     // Look for certain special plugins.
-    if (nsPluginHost::IsJavaMIMEType(mimeType.get())) {
-      mIsJavaPlugin = true;
-    } else if (mimeType.EqualsLiteral("application/x-shockwave-flash")) {
-      mIsFlashPlugin = true;
+    switch (nsPluginHost::IsSpecialPluginType(mimeType)) {
+      case nsPluginHost::eSpecialPluginTypeJava:
+        mIsJavaPlugin = true;
+        break;
+      case nsPluginHost::eSpecialPluginTypeFlash:
+        mIsFlashPlugin = true;
+        break;
+      case nsPluginHost::eSpecialPluginTypeNone:
+      default:
+        break;
     }
 
     // Fill in our MIME type array.
