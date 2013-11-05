@@ -194,8 +194,6 @@ var gPluginHandler = {
         return "PluginVulnerableUpdatable";
       case Ci.nsIObjectLoadingContent.PLUGIN_VULNERABLE_NO_UPDATE:
         return "PluginVulnerableNoUpdate";
-      case Ci.nsIObjectLoadingContent.PLUGIN_PLAY_PREVIEW:
-        return "PluginPlayPreview";
       default:
         // Not all states map to a handler
         return null;
@@ -361,10 +359,6 @@ var gPluginHandler = {
         shouldShowNotification = true;
         break;
 
-      case "PluginPlayPreview":
-        this._handlePlayPreviewEvent(plugin);
-        break;
-
       case "PluginDisabled":
         let manageLink = this.getPluginUI(plugin, "managePluginsLink");
         this.addLinkClickCallback(manageLink, "managePlugins");
@@ -426,12 +420,6 @@ var gPluginHandler = {
       objLoadingContent.pluginFallbackType >= Ci.nsIObjectLoadingContent.PLUGIN_CLICK_TO_PLAY &&
       objLoadingContent.pluginFallbackType <= Ci.nsIObjectLoadingContent.PLUGIN_VULNERABLE_NO_UPDATE;
 
-    if (objLoadingContent.pluginFallbackType == Ci.nsIObjectLoadingContent.PLUGIN_PLAY_PREVIEW) {
-      // checking if play preview is subject to CTP rules
-      let playPreviewInfo = pluginHost.getPlayPreviewInfo(objLoadingContent.actualType);
-      isFallbackTypeValid = !playPreviewInfo.ignoreCTP;
-    }
-
     return !objLoadingContent.activated &&
            pluginPermission != Ci.nsIPermissionManager.DENY_ACTION &&
            isFallbackTypeValid;
@@ -442,17 +430,6 @@ var gPluginHandler = {
     if (overlay) {
       overlay.classList.remove("visible");
     }
-  },
-
-  stopPlayPreview: function PH_stopPlayPreview(aPlugin, aPlayPlugin) {
-    let objLoadingContent = aPlugin.QueryInterface(Ci.nsIObjectLoadingContent);
-    if (objLoadingContent.activated)
-      return;
-
-    if (aPlayPlugin)
-      objLoadingContent.playPlugin();
-    else
-      objLoadingContent.cancelPlayPreview();
   },
 
   newPluginInstalled : function(event) {
@@ -637,48 +614,6 @@ var gPluginHandler = {
         aEvent.stopPropagation();
         aEvent.preventDefault();
       }
-    }
-  },
-
-  _handlePlayPreviewEvent: function PH_handlePlayPreviewEvent(aPlugin) {
-    let doc = aPlugin.ownerDocument;
-    let browser = gBrowser.getBrowserForDocument(doc.defaultView.top.document);
-    let pluginHost = Cc["@mozilla.org/plugin/host;1"].getService(Ci.nsIPluginHost);
-    let pluginInfo = this._getPluginInfo(aPlugin);
-    let playPreviewInfo = pluginHost.getPlayPreviewInfo(pluginInfo.mimetype);
-
-    let previewContent = this.getPluginUI(aPlugin, "previewPluginContent");
-    let iframe = previewContent.getElementsByClassName("previewPluginContentFrame")[0];
-    if (!iframe) {
-      // lazy initialization of the iframe
-      iframe = doc.createElementNS("http://www.w3.org/1999/xhtml", "iframe");
-      iframe.className = "previewPluginContentFrame";
-      previewContent.appendChild(iframe);
-
-      // Force a style flush, so that we ensure our binding is attached.
-      aPlugin.clientTop;
-    }
-    iframe.src = playPreviewInfo.redirectURL;
-
-    // MozPlayPlugin event can be dispatched from the extension chrome
-    // code to replace the preview content with the native plugin
-    previewContent.addEventListener("MozPlayPlugin", function playPluginHandler(aEvent) {
-      if (!aEvent.isTrusted)
-        return;
-
-      previewContent.removeEventListener("MozPlayPlugin", playPluginHandler, true);
-
-      let playPlugin = !aEvent.detail;
-      gPluginHandler.stopPlayPreview(aPlugin, playPlugin);
-
-      // cleaning up: removes overlay iframe from the DOM
-      let iframe = previewContent.getElementsByClassName("previewPluginContentFrame")[0];
-      if (iframe)
-        previewContent.removeChild(iframe);
-    }, true);
-
-    if (!playPreviewInfo.ignoreCTP) {
-      gPluginHandler._showClickToPlayNotification(browser, aPlugin, false);
     }
   },
 
