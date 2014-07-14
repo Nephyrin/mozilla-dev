@@ -436,6 +436,88 @@ public:
   }
 };
 
+/*
+ * Implements the async aspects of the unregister algorithm.
+ */
+class UnregisterRunnable : public nsRunnable
+{
+  nsCOMPtr<nsPIDOMWindow> mWindow;
+  nsCOMPtr<nsIURI> mScopeURI;
+  nsRefPtr<Promise> mPromise;
+public:
+  UnregisterRunnable(nsPIDOMWindow* aWindow, nsIURI* aScopeURI,
+                     Promise* aPromise)
+    : mWindow(aWindow), mScopeURI(aScopeURI), mPromise(aPromise)
+  {
+    AssertIsOnMainThread();
+  }
+
+  NS_IMETHODIMP
+  Run()
+  {
+    AssertIsOnMainThread();
+
+    nsRefPtr<ServiceWorkerManager> swm = ServiceWorkerManager::GetInstance();
+
+    nsRefPtr<ServiceWorkerManager::ServiceWorkerDomainInfo> domainInfo =
+      swm->GetDomainInfo(mScopeURI);
+    MOZ_ASSERT(domainInfo);
+
+    nsCString spec;
+    nsresult rv = mScopeURI->GetSpecIgnoringRef(spec);
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+      AutoJSAPI api;
+      api.Init(mWindow);
+      mPromise->MaybeReject(api.cx(), JS::UndefinedHandleValue);
+      return NS_OK;
+    }
+
+    nsRefPtr<ServiceWorkerRegistration> registration;
+    if (!domainInfo->mServiceWorkerRegistrations.Get(spec,
+                                                     getter_AddRefs(registration))) {
+      mPromise->MaybeResolve(JS::UndefinedHandleValue);
+      return NS_OK;
+    }
+
+    MOZ_ASSERT(registration);
+
+    registration->mPendingUninstall = true;
+
+    if (registration->HasUpdatePromise()) {
+      swm->AbortCurrentUpdate(registration);
+    }
+
+    if (registration->mInstallingWorker) {
+      // FIXME(nsm): Terminate installing worker.
+      // Bug 1043701 Set state to redundant.
+      // Fire statechange.
+      registration->mInstallingWorker = nullptr;
+      // FIXME(nsm): Abort any inflight requests from installing worker.
+    }
+
+    if (registration->mWaitingWorker) {
+      // FIXME(nsm): Bug 1043701 Set state to redundant.
+      // Fire statechange.
+      registration->mWaitingWorker = nullptr;
+    }
+
+    mPromise->MaybeResolve(JS::UndefinedHandleValue);
+
+    // The "Wait until no document is using registration" can actually be
+    // handled by [[HandleDocumentUnload]] in Bug 1041340, so we simply check
+    // if the document is currently in use here.
+    if (!registration->IsControllingDocuments()) {
+      if (registration->mCurrentWorker) {
+        // FIXME(nsm): Bug 1043701 Set state to redundant.
+        registration->mCurrentWorker = nullptr;
+      }
+      domainInfo->RemoveRegistration(registration);
+    }
+
+    return NS_OK;
+  }
+};
+
 // If we return an error code here, the ServiceWorkerContainer will
 // automatically reject the Promise.
 NS_IMETHODIMP
@@ -558,10 +640,7 @@ ServiceWorkerManager::Update(ServiceWorkerRegistration* aRegistration,
 {
   if (aRegistration->HasUpdatePromise()) {
     NS_WARNING("Already had a UpdatePromise. Aborting that one!");
-    RejectUpdatePromiseObservers(aRegistration, NS_ERROR_DOM_ABORT_ERR);
-    MOZ_ASSERT(aRegistration->mUpdateInstance);
-    aRegistration->mUpdateInstance->Abort();
-    aRegistration->mUpdateInstance = nullptr;
+    AbortCurrentUpdate(aRegistration);
   }
 
   if (aRegistration->mInstallingWorker) {
@@ -588,6 +667,16 @@ ServiceWorkerManager::Update(ServiceWorkerRegistration* aRegistration,
   return NS_OK;
 }
 
+void
+ServiceWorkerManager::AbortCurrentUpdate(ServiceWorkerRegistration* aRegistration)
+{
+  MOZ_ASSERT(aRegistration->HasUpdatePromise());
+  RejectUpdatePromiseObservers(aRegistration, NS_ERROR_DOM_ABORT_ERR);
+  MOZ_ASSERT(aRegistration->mUpdateInstance);
+  aRegistration->mUpdateInstance->Abort();
+  aRegistration->mUpdateInstance = nullptr;
+}
+
 // If we return an error, ServiceWorkerContainer will reject the Promise.
 NS_IMETHODIMP
 ServiceWorkerManager::Unregister(nsIDOMWindow* aWindow, const nsAString& aScope,
@@ -599,9 +688,53 @@ ServiceWorkerManager::Unregister(nsIDOMWindow* aWindow, const nsAString& aScope,
   // XXXnsm Don't allow chrome callers for now.
   MOZ_ASSERT(!nsContentUtils::IsCallerChrome());
 
-  // FIXME(nsm): Same bug, different patch.
+  nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(aWindow);
+  if (!window) {
+    return NS_ERROR_FAILURE;
+  }
 
-  return NS_ERROR_DOM_NOT_SUPPORTED_ERR;
+  nsCOMPtr<nsIGlobalObject> sgo = do_QueryInterface(window);
+
+  ErrorResult result;
+  nsRefPtr<Promise> promise = Promise::Create(sgo, result);
+  if (result.Failed()) {
+    return result.ErrorCode();
+  }
+
+  nsCOMPtr<nsIURI> documentURI = window->GetDocumentURI();
+  if (!documentURI) {
+    return NS_ERROR_FAILURE;
+  }
+
+  // Although the spec says that the same-origin checks should also be done
+  // asynchronously, we do them in sync because the Promise created by the
+  // WebIDL infrastructure due to a returned error will be resolved
+  // asynchronously. We aren't making any internal state changes in these
+  // checks, so ordering of multiple calls is not affected.
+
+  nsCOMPtr<nsIPrincipal> documentPrincipal;
+  if (window->GetExtantDoc()) {
+    documentPrincipal = window->GetExtantDoc()->NodePrincipal();
+  } else {
+    documentPrincipal = do_CreateInstance("@mozilla.org/nullprincipal;1");
+  }
+
+  nsCOMPtr<nsIURI> scopeURI;
+  nsresult rv = NS_NewURI(getter_AddRefs(scopeURI), aScope, nullptr, documentURI);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return NS_ERROR_DOM_SECURITY_ERR;
+  }
+
+  rv = documentPrincipal->CheckMayLoad(scopeURI, true /* report */,
+                                       false /* allowIfInheritsPrinciple */);
+  if (NS_FAILED(rv)) {
+    return NS_ERROR_DOM_SECURITY_ERR;
+  }
+
+  nsRefPtr<nsIRunnable> unregisterRunnable =
+    new UnregisterRunnable(window, scopeURI, promise);
+  promise.forget(aPromise);
+  return NS_DispatchToCurrentThread(unregisterRunnable);
 }
 
 /* static */
@@ -1069,6 +1202,10 @@ public:
     nsRefPtr<ServiceWorkerManager> swm = ServiceWorkerManager::GetInstance();
     swm->InvalidateServiceWorkerContainerWorker(mRegistration,
                                                 WhichServiceWorker::ACTIVE_WORKER | WhichServiceWorker::WAITING_WORKER);
+    if (!mRegistration->mCurrentWorker) {
+      // FIXME(nsm): Just got unregistered!
+      return NS_OK;
+    }
 
     // FIXME(nsm): Steps 7 of the algorithm.
 

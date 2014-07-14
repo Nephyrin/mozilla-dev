@@ -31,9 +31,14 @@
     });
   }
 
+  function unregister() {
+    return navigator.serviceWorker.unregister("./*");
+  }
+
   function runTest() {
     simpleRegister()
       .then(nextRegister)
+      .then(unregister)
       .then(function() {
         SimpleTest.finish();
       }).catch(function(e) {

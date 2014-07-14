@@ -201,6 +201,7 @@ class ServiceWorkerManager MOZ_FINAL : public nsIServiceWorkerManager
   friend class CallInstallRunnable;
   friend class CancelServiceWorkerInstallationRunnable;
   friend class ServiceWorkerUpdateInstance;
+  friend class UnregisterRunnable;
 
 public:
   NS_DECL_ISUPPORTS
@@ -269,6 +270,14 @@ public:
       return registration;
     }
 
+    void
+    RemoveRegistration(ServiceWorkerRegistration* aRegistration)
+    {
+      MOZ_ASSERT(mServiceWorkerRegistrations.Contains(aRegistration->mScope));
+      ServiceWorkerManager::RemoveScope(mOrderedScopes, aRegistration->mScope);
+      mServiceWorkerRegistrations.Remove(aRegistration->mScope);
+    }
+
     NS_INLINE_DECL_REFCOUNTING(ServiceWorkerDomainInfo)
 
   private:
@@ -317,6 +326,9 @@ public:
 private:
   ServiceWorkerManager();
   ~ServiceWorkerManager();
+
+  void
+  AbortCurrentUpdate(ServiceWorkerRegistration* aRegistration);
 
   NS_IMETHOD
   Update(ServiceWorkerRegistration* aRegistration, nsPIDOMWindow* aWindow);
