@@ -9,6 +9,7 @@ DIRS += [
     'ajax',
     'beacon',
     'bugs',
+    'fetch',
     'general',
     'geolocation',
     'localstorage',
