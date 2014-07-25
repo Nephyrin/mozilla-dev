@@ -12,6 +12,7 @@ EXPORTS += [
 ]
 
 EXPORTS.mozilla.net += [
+    'AlternateSourceChannel.h',
     'ChannelDiverterChild.h',
     'ChannelDiverterParent.h',
     'Dashboard.h',
@@ -19,6 +20,7 @@ EXPORTS.mozilla.net += [
 ]
 
 UNIFIED_SOURCES += [
+    'AlternateSourceChannel.cpp',
     'ArrayBufferInputStream.cpp',
     'BackgroundFileSaver.cpp',
     'ChannelDiverterChild.cpp',

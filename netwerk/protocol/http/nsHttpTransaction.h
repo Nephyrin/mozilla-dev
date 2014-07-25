@@ -12,6 +12,7 @@
 #include "EventTokenBucket.h"
 #include "nsCOMPtr.h"
 #include "nsThreadUtils.h"
+#include "nsIAsyncOutputStream.h"
 #include "nsILoadGroup.h"
 #include "nsIInterfaceRequestor.h"
 #include "TimingStruct.h"
@@ -130,6 +131,8 @@ public:
     void SetLoadGroupConnectionInfo(nsILoadGroupConnectionInfo *aLoadGroupCI) { mLoadGroupCI = aLoadGroupCI; }
     void DispatchedAsBlocking();
     void RemoveDispatchedAsBlocking();
+
+    void MarkConnectionless() { MOZ_ASSERT(!mConnection); mConnectionless = true; }
 
     nsHttpTransaction *QueryHttpTransaction() MOZ_OVERRIDE { return this; }
 
@@ -259,6 +262,7 @@ private:
     bool                            mPreserveStream;
     bool                            mDispatchedAsBlocking;
     bool                            mResponseTimeoutEnabled;
+    bool                            mConnectionless;
     bool                            mDontRouteViaWildCard;
 
     // mClosed           := transaction has been explicitly closed

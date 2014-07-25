@@ -21,10 +21,14 @@ XPIDL_SOURCES += [
 XPIDL_MODULE = 'necko_http'
 
 EXPORTS += [
+    'nsAHttpConnection.h',
+    'nsAHttpTransaction.h',
     'nsHttp.h',
     'nsHttpAtomList.h',
     'nsHttpHeaderArray.h',
     'nsHttpResponseHead.h',
+    'nsHttpTransaction.h',
+    'TimingStruct.h',
 ]
 
 EXPORTS.mozilla.net += [

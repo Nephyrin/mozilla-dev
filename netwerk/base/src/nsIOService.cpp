@@ -36,6 +36,7 @@
 #include "nsURLHelper.h"
 #include "nsPIDNSService.h"
 #include "nsIProtocolProxyService2.h"
+#include "AlternateSourceChannel.h"
 #include "MainThreadUtils.h"
 
 #if defined(XP_WIN)
@@ -43,6 +44,7 @@
 #endif
 
 using namespace mozilla;
+using mozilla::net::AlternateSourceChannel;
 
 #define PORT_PREF_PREFIX           "network.security.ports."
 #define PORT_PREF(x)               PORT_PREF_PREFIX x
@@ -1214,6 +1216,15 @@ nsIOService::ExtractCharsetFromContentType(const nsACString &aTypeHeader,
     if (*aHadCharset && *aCharsetStart == *aCharsetEnd) {
         *aHadCharset = false;
     }
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsIOService::CreateAlternateSourceChannel(nsIChannel* aChannel,
+                                          nsIChannel** aWrappedChannel)
+{
+    nsCOMPtr<nsIChannel> wrapper = new AlternateSourceChannel(aChannel);
+    wrapper.forget(aWrappedChannel);
     return NS_OK;
 }
 

@@ -80,6 +80,9 @@ public:
   NS_IMETHOD GetLocalPort(int32_t* port);
   NS_IMETHOD GetRemoteAddress(nsACString& addr);
   NS_IMETHOD GetRemotePort(int32_t* port);
+  NS_IMETHOD AsyncOpenNetworkless(nsIStreamListener *listener, nsISupports *aContext);
+  NS_IMETHOD AsyncOpenFinish();
+  NS_IMETHOD GetConnectionlessTransaction(nsHttpTransaction** aTransaction);
   // nsISupportsPriority
   NS_IMETHOD SetPriority(int32_t value);
   // nsIResumableChannel

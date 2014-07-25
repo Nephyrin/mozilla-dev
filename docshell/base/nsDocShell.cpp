@@ -22,6 +22,7 @@
 #include "mozilla/Telemetry.h"
 #include "mozilla/unused.h"
 #include "mozilla/VisualEventTracer.h"
+#include "mozilla/net/AlternateSourceChannel.h"
 #include "URIUtils.h"
 
 #ifdef MOZ_LOGGING
@@ -208,6 +209,7 @@ static NS_DEFINE_CID(kAppShellCID, NS_APPSHELL_CID);
 
 using namespace mozilla;
 using namespace mozilla::dom;
+using namespace mozilla::net;
 
 // True means sUseErrorPages has been added to preferences var cache.
 static bool gAddedPreferencesVarCache = false;
@@ -10094,6 +10096,12 @@ nsDocShell::DoURILoad(nsIURI * aURI,
         if (IsFrame()) {
             timedChannel->SetInitiatorType(NS_LITERAL_STRING("subdocument"));
         }
+    }
+
+    //TODO(jdm): Check document for presence of navigation controller
+    if (false) {
+        channel = new AlternateSourceChannel(channel);
+        //TODO(jdm): inform navigation controller about channel
     }
 
     rv = DoChannelLoad(channel, uriLoader, aBypassClassifier);

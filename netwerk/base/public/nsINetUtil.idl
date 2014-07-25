@@ -5,6 +5,7 @@
 
 #include "nsISupports.idl"
 
+interface nsIChannel;
 interface nsIURI;
 interface nsIPrefBranch;
 
@@ -192,4 +193,6 @@ interface nsINetUtil : nsISupports
                                         out AUTF8String aCharset,
                                         out long aCharsetStart,
                                         out long aCharsetEnd);
+
+  nsIChannel createAlternateSourceChannel(in nsIChannel aChannel);
 };

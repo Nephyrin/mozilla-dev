@@ -123,6 +123,7 @@ nsHttpTransaction::nsHttpTransaction()
     , mPreserveStream(false)
     , mDispatchedAsBlocking(false)
     , mResponseTimeoutEnabled(true)
+    , mConnectionless(false)
     , mDontRouteViaWildCard(false)
     , mReportedStart(false)
     , mReportedResponseHeader(false)
@@ -448,6 +449,7 @@ nsHttpTransaction::TakeSubTransactions(
 void
 nsHttpTransaction::SetConnection(nsAHttpConnection *conn)
 {
+    MOZ_ASSERT(!mConnectionless);
     NS_IF_RELEASE(mConnection);
     NS_IF_ADDREF(mConnection = conn);
 
@@ -1397,7 +1399,7 @@ nsHttpTransaction::HandleContentStart()
 
         // notify the connection, give it a chance to cause a reset.
         bool reset = false;
-        if (!mRestartInProgressVerifier.IsSetup())
+        if (!mRestartInProgressVerifier.IsSetup() && mConnection)
             mConnection->OnHeadersAvailable(this, mRequestHead, mResponseHead, &reset);
 
         // looks like we should ignore this response, resetting...
@@ -1426,15 +1428,19 @@ nsHttpTransaction::HandleContentStart()
         }
 
         if (mResponseHead->Status() == 200 &&
-            mConnection->IsProxyConnectInProgress()) {
+            mConnection && mConnection->IsProxyConnectInProgress()) {
             // successful CONNECTs do not have response bodies
             mNoContent = true;
         }
+        if (mConnection) {
         mConnection->SetLastTransactionExpectedNoContent(mNoContent);
-        if (mInvalidResponseBytesRead)
+        }
+        if (mInvalidResponseBytesRead) {
+            MOZ_ASSERT(mConnection);
             gHttpHandler->ConnMgr()->PipelineFeedbackInfo(
                 mConnInfo, nsHttpConnectionMgr::BadInsufficientFraming,
                 nullptr, mClassification);
+        }
 
         if (mNoContent)
             mContentLength = 0;
@@ -1497,7 +1503,7 @@ nsHttpTransaction::HandleContent(char *buf,
     *contentRead = 0;
     *contentRemaining = 0;
 
-    MOZ_ASSERT(mConnection);
+    MOZ_ASSERT(mConnection || mConnectionless);
 
     if (!mDidContentStart) {
         rv = HandleContentStart();
@@ -1518,7 +1524,7 @@ nsHttpTransaction::HandleContent(char *buf,
         // headers. So, unless the connection is persistent, we must make
         // allowances for a possibly invalid Content-Length header. Thus, if
         // NOT persistent, we simply accept everything in |buf|.
-        if (mConnection->IsPersistent() || mPreserveStream ||
+        if ((mConnection && mConnection->IsPersistent()) || mPreserveStream ||
             mHttpVersion >= NS_HTTP_VERSION_1_1) {
             int64_t remaining = mContentLength - mContentRead;
             *contentRead = uint32_t(std::min<int64_t>(count, remaining));

@@ -227,6 +227,7 @@ nsHttpChannel::nsHttpChannel()
     , mConcurentCacheAccess(0)
     , mIsPartialRequest(0)
     , mHasAutoRedirectVetoNotifier(0)
+    , mDelayTransactionIndefinitely(false)
     , mDidReval(false)
 {
     LOG(("Creating nsHttpChannel [this=%p]\n", this));
@@ -314,7 +315,9 @@ nsHttpChannel::Connect()
 
     // Consider opening a TCP connection right away
     RetrieveSSLOptions();
-    SpeculativeConnect();
+    if (!mDelayTransactionIndefinitely) {
+      SpeculativeConnect();
+    }
 
     // Don't allow resuming when cache must be used
     if (mResuming && (mLoadFlags & LOAD_ONLY_FROM_CACHE)) {
@@ -327,7 +330,9 @@ nsHttpChannel::Connect()
     }
 
     // open a cache entry for this channel...
-    rv = OpenCacheEntry(usingSSL);
+    if (!mDelayTransactionIndefinitely) {
+      rv = OpenCacheEntry(usingSSL);
+    }
 
     // do not continue if asyncOpenCacheEntry is in progress
     if (mCacheEntriesToWaitFor) {
@@ -401,8 +406,10 @@ nsHttpChannel::ContinueConnect()
     nsresult rv = SetupTransaction();
     if (NS_FAILED(rv)) return rv;
 
+    if (!mDelayTransactionIndefinitely) {
     rv = gHttpHandler->InitiateTransaction(mTransaction, mPriority);
     if (NS_FAILED(rv)) return rv;
+    }
 
     rv = mTransactionPump->AsyncRead(this, nullptr);
     if (NS_FAILED(rv)) return rv;
@@ -4588,6 +4595,33 @@ nsHttpChannel::AsyncOpen(nsIStreamListener *listener, nsISupports *context)
     return rv;
 }
 
+NS_IMETHODIMP
+nsHttpChannel::GetConnectionlessTransaction(nsHttpTransaction** aTransaction) {
+    mTransaction->MarkConnectionless();
+    NS_ADDREF(*aTransaction = mTransaction);
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsHttpChannel::AsyncOpenNetworkless(nsIStreamListener *listener, nsISupports *context)
+{
+    mDelayTransactionIndefinitely = true;
+    return AsyncOpen(listener, context);
+}
+
+NS_IMETHODIMP
+nsHttpChannel::AsyncOpenFinish()
+{
+    mDelayTransactionIndefinitely = false;
+    //TODO: open cache entry?
+    //TODO: speculatively connect?
+
+    nsresult rv = gHttpHandler->InitiateTransaction(mTransaction, mPriority);
+    NS_ENSURE_SUCCESS(rv, rv);
+
+    return NS_OK;
+}
+
 nsresult
 nsHttpChannel::BeginConnect()
 {
@@ -5862,8 +5896,10 @@ nsHttpChannel::DoAuthRetry(nsAHttpConnection *conn)
     if (conn)
         mTransaction->SetConnection(conn);
 
+    if (!mDelayTransactionIndefinitely) {
     rv = gHttpHandler->InitiateTransaction(mTransaction, mPriority);
     if (NS_FAILED(rv)) return rv;
+    }
 
     rv = mTransactionPump->AsyncRead(this, nullptr);
     if (NS_FAILED(rv)) return rv;

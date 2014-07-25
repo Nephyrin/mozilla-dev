@@ -108,6 +108,9 @@ public:
     NS_IMETHOD AsyncOpen(nsIStreamListener *listener, nsISupports *aContext);
     // nsIHttpChannelInternal
     NS_IMETHOD SetupFallbackChannel(const char *aFallbackKey);
+    NS_IMETHOD AsyncOpenNetworkless(nsIStreamListener *listener, nsISupports *aContext);
+    NS_IMETHOD AsyncOpenFinish();
+    NS_IMETHOD GetConnectionlessTransaction(nsHttpTransaction** aTransaction);
     // nsISupportsPriority
     NS_IMETHOD SetPriority(int32_t value);
     // nsIResumableChannel
@@ -407,6 +410,8 @@ private:
     uint32_t                          mIsPartialRequest : 1;
     // true iff there is AutoRedirectVetoNotifier on the stack
     uint32_t                          mHasAutoRedirectVetoNotifier : 1;
+    // whether to postpone initiating the transaction
+    uint32_t                          mDelayTransactionIndefinitely : 1;
 
     nsTArray<nsContinueRedirectionFunc> mRedirectFuncStack;
 

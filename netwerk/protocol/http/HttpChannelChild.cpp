@@ -1144,6 +1144,23 @@ HttpChannelChild::GetSecurityInfo(nsISupports **aSecurityInfo)
 }
 
 NS_IMETHODIMP
+HttpChannelChild::AsyncOpenFinish()
+{
+  return NS_ERROR_FAILURE;
+}
+
+NS_IMETHODIMP
+HttpChannelChild::AsyncOpenNetworkless(nsIStreamListener *listener, nsISupports *aContext)
+{
+  return NS_ERROR_FAILURE;
+}
+
+NS_IMETHODIMP
+HttpChannelChild::GetConnectionlessTransaction(nsHttpTransaction** aTransaction) {
+  return NS_ERROR_NOT_AVAILABLE;
+}
+
+NS_IMETHODIMP
 HttpChannelChild::AsyncOpen(nsIStreamListener *listener, nsISupports *aContext)
 {
   LOG(("HttpChannelChild::AsyncOpen [this=%p uri=%s]\n", this, mSpec.get()));

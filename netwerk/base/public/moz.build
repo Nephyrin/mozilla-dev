@@ -6,6 +6,7 @@
 
 XPIDL_SOURCES += [
     'mozIThirdPartyUtil.idl',
+    'nsIAlternateSourceChannel.idl',
     'nsIApplicationCache.idl',
     'nsIApplicationCacheChannel.idl',
     'nsIApplicationCacheContainer.idl',

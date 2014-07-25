@@ -9,9 +9,13 @@
 template<class T> class nsTArray;
 template<class T> class nsCOMArray;
 class nsCString;
+namespace mozilla { namespace net {
+class nsHttpTransaction;
+}}
 %}
 [ptr] native StringArray(nsTArray<nsCString>);
 [ref] native securityMessagesArray(nsCOMArray<nsISecurityConsoleMessage>);
+[ptr] native nsHttpTransactionPtr(mozilla::net::nsHttpTransaction);
 
 interface nsIAsyncInputStream;
 interface nsIAsyncOutputStream;
@@ -19,6 +23,7 @@ interface nsIPrincipal;
 interface nsIProxyInfo;
 interface nsISecurityConsoleMessage;
 interface nsISocketTransport;
+interface nsIStreamListener;
 interface nsIURI;
 
 /**
@@ -38,7 +43,7 @@ interface nsIHttpUpgradeListener : nsISupports
  * using any feature exposed by this interface, be aware that this interface
  * will change and you will be broken.  You have been warned.
  */
-[scriptable, uuid(a4bf4fc5-b5a9-4098-bd20-409d71bf18e6)]
+[scriptable, uuid(ee847842-bea9-4df4-817e-e5449085223a)]
 interface nsIHttpChannelInternal : nsISupports
 {
     /**
@@ -182,6 +187,9 @@ interface nsIHttpChannelInternal : nsISupports
      */
     attribute boolean loadUnblocked;
 
+    readonly attribute nsHttpTransactionPtr connectionlessTransaction;
+    void asyncOpenNetworkless(in nsIStreamListener listener, in nsISupports context);
+    void asyncOpenFinish();
     /**
      * This attribute en/disables the timeout for the first byte of an HTTP
      * response. Enabled by default.

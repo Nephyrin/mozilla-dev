@@ -61,7 +61,6 @@ public:
      * thread. Updates mState based on return value of OnStateStop.
      */
     nsresult CallOnStateStop();
-
 protected:
 
     enum {
