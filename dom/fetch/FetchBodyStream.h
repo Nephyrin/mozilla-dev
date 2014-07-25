@@ -11,6 +11,7 @@
 #include "nsISupportsImpl.h"
 #include "nsWrapperCache.h"
 
+class nsIDOMBlob;
 class nsPIDOMWindow;
 
 namespace mozilla {
@@ -59,10 +60,17 @@ public:
     return mOwner;
   }
 
+  void
+  SetBlob(nsIDOMBlob* aBlob)
+  {
+    mBlob = aBlob;
+  }
+
 private:
   virtual ~FetchBodyStream();
 
   nsISupports* mOwner;
+  nsCOMPtr<nsIDOMBlob> mBlob;
 };
 
 } // namespace dom

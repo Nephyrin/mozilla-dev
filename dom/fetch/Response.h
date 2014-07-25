@@ -6,6 +6,7 @@
 #ifndef mozilla_dom_Response_h
 #define mozilla_dom_Response_h
 
+#include "mozilla/dom/FetchBodyStream.h"
 #include "mozilla/dom/ResponseBinding.h"
 #include "mozilla/dom/UnionTypes.h"
 
@@ -77,6 +78,13 @@ public:
     return mOwner;
   }
 
+  void
+  SetBody(nsIDOMBlob* aBlob)
+  {
+    mBody = new FetchBodyStream(mOwner);
+    mBody->SetBlob(aBlob);
+  }
+
 private:
   ~Response();
 
@@ -87,6 +95,7 @@ private:
   uint16_t mStatus;
   nsCString mStatusText;
   nsRefPtr<Headers> mHeaders;
+  nsRefPtr<FetchBodyStream> mBody;
 };
 
 } // namespace dom

@@ -5,17 +5,29 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 EXPORTS.mozilla.dom += [
+    'Fetch.h',
     'FetchBodyStream.h',
+    'FetchDriver.h',
     'Headers.h',
+    'InternalRequest.h',
+    'InternalResponse.h',
     'Request.h',
     'Response.h',
 ]
 
 UNIFIED_SOURCES += [
+    'Fetch.cpp',
     'FetchBodyStream.cpp',
+    'FetchDriver.cpp',
     'Headers.cpp',
+    'InternalRequest.cpp',
     'Request.cpp',
     'Response.cpp',
+]
+
+LOCAL_INCLUDES += [
+    # For nsDOMBlobBuilder.h
+    '/content/base/src'
 ]
 
 FAIL_ON_WARNINGS = True

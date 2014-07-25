@@ -5,8 +5,9 @@
 
 #include "FetchBodyStream.h"
 
-#include "nsPIDOMWindow.h"
+#include "nsIDOMFile.h"
 #include "nsISupportsImpl.h"
+#include "nsPIDOMWindow.h"
 
 #include "mozilla/dom/Promise.h"
 
@@ -24,6 +25,7 @@ NS_INTERFACE_MAP_END
 FetchBodyStream::FetchBodyStream(nsISupports* aOwner)
   : mOwner(aOwner)
 {
+  SetIsDOMBinding();
 }
 
 FetchBodyStream::~FetchBodyStream()
@@ -63,7 +65,19 @@ FetchBodyStream::AsBlob()
     return nullptr;
   }
 
-  promise->MaybeReject(NS_ERROR_NOT_AVAILABLE);
+  if (mBlob) {
+    AutoSafeJSContext cx;
+    JS::Rooted<JS::Value> val(cx);
+    nsresult rv = nsContentUtils::WrapNative(cx, mBlob, &val);
+    if (NS_FAILED(rv)) {
+      promise->MaybeReject(rv);
+    } else {
+      promise->MaybeResolve(cx, val);
+    }
+  } else {
+    // FIXME(nsm): Not ready to be async yet.
+    MOZ_CRASH();
+  }
   return promise.forget();
 }
 

@@ -58,3 +58,4 @@ MSG_DEF(MSG_HEADERS_IMMUTABLE, 0, "Headers are immutable and cannot be modified.
 MSG_DEF(MSG_INVALID_HEADER_NAME, 1, "{0} is an invalid header name.")
 MSG_DEF(MSG_INVALID_HEADER_VALUE, 1, "{0} is an invalid header value.")
 MSG_DEF(MSG_INVALID_HEADER_SEQUENCE, 0, "Headers require name/value tuples when being initialized by a sequence.")
+MSG_DEF(MSG_INVALID_REQUEST_METHOD, 1, "HTTP Method {0} is forbidden.")

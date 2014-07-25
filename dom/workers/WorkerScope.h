@@ -120,7 +120,9 @@ public:
   Dump(const Optional<nsAString>& aString) const;
 
   already_AddRefed<Promise>
-  Fetch(const RequestOrString& aInput, const RequestInit& aInit);
+  Fetch(const RequestOrString& aInput,
+        const RequestInit& aInit,
+        ErrorResult& aRv);
 };
 
 class DedicatedWorkerGlobalScope MOZ_FINAL : public WorkerGlobalScope

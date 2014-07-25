@@ -885,7 +885,8 @@ public:
   void Alert(const nsAString& aMessage, mozilla::ErrorResult& aError);
   bool Confirm(const nsAString& aMessage, mozilla::ErrorResult& aError);
   already_AddRefed<mozilla::dom::Promise> Fetch(const mozilla::dom::RequestOrString& aInput,
-                                                const mozilla::dom::RequestInit& aInit);
+                                                const mozilla::dom::RequestInit& aInit,
+                                                mozilla::ErrorResult& aRv);
   void Prompt(const nsAString& aMessage, const nsAString& aInitial,
               nsAString& aReturn, mozilla::ErrorResult& aError);
   void Print(mozilla::ErrorResult& aError);

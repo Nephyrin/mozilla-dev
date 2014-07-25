@@ -46,7 +46,9 @@ Response::Redirect(const GlobalObject& aGlobal, const nsAString& aUrl,
 already_AddRefed<FetchBodyStream>
 Response::Body() const
 {
-  MOZ_CRASH("NOT IMPLEMENTED!");
+  MOZ_ASSERT(mBody);
+  nsRefPtr<FetchBodyStream> body = mBody;
+  return body.forget();
 }
 
 /*static*/ already_AddRefed<Response>

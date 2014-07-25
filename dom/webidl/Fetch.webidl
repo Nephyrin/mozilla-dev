@@ -31,6 +31,7 @@ interface FetchBodyStream {
  Pref="dom.fetch.enabled"]
 interface GlobalFetch {
   // Promise<Response>
+  [Throws]
   Promise fetch(RequestInfo input, optional RequestInit init);
 };
 
