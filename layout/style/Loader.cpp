@@ -1422,6 +1422,9 @@ Loader::LoadSheet(SheetLoadData* aLoadData, StyleSheetState aSheetState)
                                    mDocument);
     }
 
+    //XXXjdm Do synchronous stylesheets ever come up in a situation where a
+    //       ServiceWorker is supposed to intercept the request?
+
     // Just load it
     nsCOMPtr<nsIInputStream> stream;
     nsCOMPtr<nsIChannel> channel;
@@ -1551,6 +1554,8 @@ Loader::LoadSheet(SheetLoadData* aLoadData, StyleSheetState aSheetState)
       }
     }
   }
+
+  channel = mDocument->InterceptFetch(channel);
 
   // Now tell the channel we expect text/css data back....  We do
   // this before opening it, so it's only treated as a hint.

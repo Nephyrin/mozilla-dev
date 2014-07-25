@@ -569,7 +569,7 @@ static nsresult NewImageChannel(nsIChannel **aResult,
                                 // aLoadingPrincipal and false otherwise.
                                 bool *aForcePrincipalCheckForCacheEntry,
                                 nsIURI *aURI,
-                                nsIURI *aInitialDocumentURI,
+                                nsIDocument *aLoadingDocument,
                                 nsIURI *aReferringURI,
                                 nsILoadGroup *aLoadGroup,
                                 const nsCString& aAcceptHeader,
@@ -581,6 +581,8 @@ static nsresult NewImageChannel(nsIChannel **aResult,
   nsCOMPtr<nsIHttpChannel> newHttpChannel;
 
   nsCOMPtr<nsIInterfaceRequestor> callbacks;
+
+  nsIURI *initialDocumentURI = aLoadingDocument ? aLoadingDocument->GetDocumentURI() : nullptr;
 
   if (aLoadGroup) {
     // Get the notification callbacks from the load group for the new channel.
@@ -600,7 +602,8 @@ static nsresult NewImageChannel(nsIChannel **aResult,
   // canceled too.
   //
   aLoadFlags |= nsIChannel::LOAD_CLASSIFY_URI;
-  rv = NS_NewChannel(aResult,
+  nsCOMPtr<nsIChannel> newChannel;
+  rv = NS_NewChannel(getter_AddRefs(newChannel),
                      aURI,        // URI
                      nullptr,      // Cached IOService
                      nullptr,      // LoadGroup
@@ -609,6 +612,12 @@ static nsresult NewImageChannel(nsIChannel **aResult,
                      aPolicy);
   if (NS_FAILED(rv))
     return rv;
+
+  if (aLoadingDocument) {
+    newChannel = aLoadingDocument->InterceptFetch(newChannel);
+  }
+
+  newChannel.forget(aResult);
 
   *aForcePrincipalCheckForCacheEntry = false;
 
@@ -621,7 +630,7 @@ static nsresult NewImageChannel(nsIChannel **aResult,
 
     nsCOMPtr<nsIHttpChannelInternal> httpChannelInternal = do_QueryInterface(newHttpChannel);
     NS_ENSURE_TRUE(httpChannelInternal, NS_ERROR_UNEXPECTED);
-    httpChannelInternal->SetDocumentURI(aInitialDocumentURI);
+    httpChannelInternal->SetDocumentURI(initialDocumentURI);
     newHttpChannel->SetReferrer(aReferringURI);
   }
 
@@ -1331,7 +1340,7 @@ void imgLoader::CheckCacheLimits(imgCacheTable &cache, imgCacheQueue &queue)
 
 bool imgLoader::ValidateRequestWithNewChannel(imgRequest *request,
                                                 nsIURI *aURI,
-                                                nsIURI *aInitialDocumentURI,
+                                                nsIDocument *aInitialDocument,
                                                 nsIURI *aReferrerURI,
                                                 nsILoadGroup *aLoadGroup,
                                                 imgINotificationObserver *aObserver,
@@ -1342,6 +1351,7 @@ bool imgLoader::ValidateRequestWithNewChannel(imgRequest *request,
                                                 nsIPrincipal* aLoadingPrincipal,
                                                 int32_t aCORSMode)
 {
+  nsIURI *initialDocumentURI = aInitialDocument ? aInitialDocument->GetDocumentURI() : nullptr;
   // now we need to insert a new channel request object inbetween the real
   // request and the proxy that basically delays loading the image until it
   // gets a 304 or figures out that this needs to be a new request
@@ -1381,7 +1391,7 @@ bool imgLoader::ValidateRequestWithNewChannel(imgRequest *request,
     rv = NewImageChannel(getter_AddRefs(newChannel),
                          &forcePrincipalCheck,
                          aURI,
-                         aInitialDocumentURI,
+                         aInitialDocument,
                          aReferrerURI,
                          aLoadGroup,
                          mAcceptHeader,
@@ -1444,7 +1454,7 @@ bool imgLoader::ValidateRequestWithNewChannel(imgRequest *request,
     // Add the proxy without notifying
     hvc->AddProxy(proxy);
 
-    mozilla::net::PredictorLearn(aURI, aInitialDocumentURI,
+    mozilla::net::PredictorLearn(aURI, initialDocumentURI,
         nsINetworkPredictor::LEARN_LOAD_SUBRESOURCE, aLoadGroup);
 
     rv = newChannel->AsyncOpen(listener, nullptr);
@@ -1457,7 +1467,7 @@ bool imgLoader::ValidateRequestWithNewChannel(imgRequest *request,
 
 bool imgLoader::ValidateEntry(imgCacheEntry *aEntry,
                                 nsIURI *aURI,
-                                nsIURI *aInitialDocumentURI,
+                                nsIDocument *aInitialDocument,
                                 nsIURI *aReferrerURI,
                                 nsILoadGroup *aLoadGroup,
                                 imgINotificationObserver *aObserver,
@@ -1568,7 +1578,7 @@ bool imgLoader::ValidateEntry(imgCacheEntry *aEntry,
   if (validateRequest && aCanMakeNewChannel) {
     LOG_SCOPE(GetImgLog(), "imgLoader::ValidateRequest |cache hit| must validate");
 
-    return ValidateRequestWithNewChannel(request, aURI, aInitialDocumentURI,
+    return ValidateRequestWithNewChannel(request, aURI, aInitialDocument,
                                          aReferrerURI, aLoadGroup, aObserver,
                                          aCX, aLoadFlags, aProxyRequest, aPolicy,
                                          aLoadingPrincipal, aCORSMode);
@@ -1722,7 +1732,7 @@ nsresult imgLoader::EvictEntries(imgCacheQueue &aQueueToClear)
                                   nsIRequest::VALIDATE_ONCE_PER_SESSION)
 
 NS_IMETHODIMP imgLoader::LoadImageXPCOM(nsIURI *aURI,
-                                   nsIURI *aInitialDocumentURI,
+                                   nsIDocument *aInitialDocument,
                                    nsIURI *aReferrerURI,
                                    nsIPrincipal* aLoadingPrincipal,
                                    nsILoadGroup *aLoadGroup,
@@ -1735,7 +1745,7 @@ NS_IMETHODIMP imgLoader::LoadImageXPCOM(nsIURI *aURI,
 {
     imgRequestProxy *proxy;
     nsresult result = LoadImage(aURI,
-                                aInitialDocumentURI,
+                                aInitialDocument,
                                 aReferrerURI,
                                 aLoadingPrincipal,
                                 aLoadGroup,
@@ -1755,7 +1765,7 @@ NS_IMETHODIMP imgLoader::LoadImageXPCOM(nsIURI *aURI,
 /* imgIRequest loadImage(in nsIURI aURI, in nsIURI aInitialDocumentURL, in nsIURI aReferrerURI, in nsIPrincipal aLoadingPrincipal, in nsILoadGroup aLoadGroup, in imgINotificationObserver aObserver, in nsISupports aCX, in nsLoadFlags aLoadFlags, in nsISupports cacheKey, in nsIChannelPolicy channelPolicy); */
 
 nsresult imgLoader::LoadImage(nsIURI *aURI,
-			      nsIURI *aInitialDocumentURI,
+                              nsIDocument *aInitialDocument,
 			      nsIURI *aReferrerURI,
 			      nsIPrincipal* aLoadingPrincipal,
 			      nsILoadGroup *aLoadGroup,
@@ -1773,6 +1783,8 @@ nsresult imgLoader::LoadImage(nsIURI *aURI,
 
   if (!aURI)
     return NS_ERROR_NULL_POINTER;
+
+  nsIURI *initialDocumentURI = aInitialDocument ? aInitialDocument->GetDocumentURI() : nullptr;
 
   nsAutoCString spec;
   aURI->GetSpec(spec);
@@ -1841,7 +1853,7 @@ nsresult imgLoader::LoadImage(nsIURI *aURI,
   imgCacheTable &cache = GetCache(aURI);
 
   if (cache.Get(spec, getter_AddRefs(entry)) && entry) {
-    if (ValidateEntry(entry, aURI, aInitialDocumentURI, aReferrerURI,
+    if (ValidateEntry(entry, aURI, aInitialDocument, aReferrerURI,
                       aLoadGroup, aObserver, aCX, requestFlags, true,
                       _retval, aPolicy, aLoadingPrincipal, corsmode)) {
       request = entry->GetRequest();
@@ -1880,7 +1892,7 @@ nsresult imgLoader::LoadImage(nsIURI *aURI,
     rv = NewImageChannel(getter_AddRefs(newChannel),
                          &forcePrincipalCheck,
                          aURI,
-                         aInitialDocumentURI,
+                         aInitialDocument,
                          aReferrerURI,
                          aLoadGroup,
                          mAcceptHeader,
@@ -1943,7 +1955,7 @@ nsresult imgLoader::LoadImage(nsIURI *aURI,
     PR_LOG(GetImgLog(), PR_LOG_DEBUG,
            ("[this=%p] imgLoader::LoadImage -- Calling channel->AsyncOpen()\n", this));
 
-    mozilla::net::PredictorLearn(aURI, aInitialDocumentURI,
+    mozilla::net::PredictorLearn(aURI, initialDocumentURI,
         nsINetworkPredictor::LEARN_LOAD_SUBRESOURCE, aLoadGroup);
 
     nsresult openRes = newChannel->AsyncOpen(listener, nullptr);

@@ -326,6 +326,8 @@ nsScriptLoader::StartLoad(nsScriptLoadRequest *aRequest, const nsAString &aType,
                      channelPolicy);
   NS_ENSURE_SUCCESS(rv, rv);
 
+  channel = mDocument->InterceptFetch(channel);
+
   nsIScriptElement *script = aRequest->mElement;
   if (aScriptFromHead &&
       !(script && (script->GetScriptAsync() || script->GetScriptDeferred()))) {

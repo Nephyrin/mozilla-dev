@@ -29,6 +29,7 @@ class nsILoadGroup;
 class imgCacheExpirationTracker;
 class imgMemoryReporter;
 class nsIChannelPolicy;
+class nsIDocument;
 
 namespace mozilla {
 namespace image {
@@ -247,7 +248,7 @@ public:
   static already_AddRefed<imgLoader> GetInstance();
 
   nsresult LoadImage(nsIURI *aURI,
-                     nsIURI *aInitialDocumentURI,
+                     nsIDocument *aInitialDocument,
                      nsIURI *aReferrerURI,
                      nsIPrincipal* aLoadingPrincipal,
                      nsILoadGroup *aLoadGroup,
@@ -329,7 +330,7 @@ public:
 private: // methods
 
   bool ValidateEntry(imgCacheEntry *aEntry, nsIURI *aKey,
-                       nsIURI *aInitialDocumentURI, nsIURI *aReferrerURI,
+                       nsIDocument *aInitialDocument, nsIURI *aReferrerURI,
                        nsILoadGroup *aLoadGroup,
                        imgINotificationObserver *aObserver, nsISupports *aCX,
                        nsLoadFlags aLoadFlags, bool aCanMakeNewChannel,
@@ -339,7 +340,7 @@ private: // methods
                        int32_t aCORSMode);
 
   bool ValidateRequestWithNewChannel(imgRequest *request, nsIURI *aURI,
-                                       nsIURI *aInitialDocumentURI,
+                                       nsIDocument *aInitialDocument,
                                        nsIURI *aReferrerURI,
                                        nsILoadGroup *aLoadGroup,
                                        imgINotificationObserver *aObserver,

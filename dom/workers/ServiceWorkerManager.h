@@ -343,7 +343,7 @@ private:
                                const nsACString& aScope,
                                ServiceWorker** aServiceWorker);
 
-  NS_IMETHOD
+  NS_IMETHODIMP
   CreateServiceWorker(const nsACString& aScriptSpec,
                       const nsACString& aScope,
                       ServiceWorker** aServiceWorker);

@@ -10,6 +10,7 @@ interface imgINotificationObserver;
 interface imgIRequest;
 
 interface nsIChannel;
+interface nsIDocument;
 interface nsILoadGroup;
 interface nsIPrincipal;
 interface nsIStreamListener;
@@ -38,7 +39,7 @@ interface imgILoader : nsISupports
   /**
    * Start the load and decode of an image.
    * @param aURI the URI to load
-   * @param aInitialDocumentURI the URI that 'initiated' the load -- used for 3rd party cookie blocking
+   * @param aInitialDocument the document that 'initiated' the load -- used for 3rd party cookie blocking and ServiceWorker interception
    * @param aReferrerURI the 'referring' URI
    * @param aLoadingPrincipal the principal of the loading document
    * @param aLoadGroup Loadgroup to put the image load into
@@ -55,7 +56,7 @@ interface imgILoader : nsISupports
    * goes away.
    */
   imgIRequest loadImageXPCOM(in nsIURI aURI,
-                             in nsIURI aInitialDocumentURL,
+                             in nsIDocument aInitialDocument,
                              in nsIURI aReferrerURI,
                              in nsIPrincipal aLoadingPrincipal,
                              in nsILoadGroup aLoadGroup,

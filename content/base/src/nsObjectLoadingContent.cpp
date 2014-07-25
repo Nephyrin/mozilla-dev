@@ -2353,6 +2353,8 @@ nsObjectLoadingContent::OpenChannel()
                      channelPolicy);
   NS_ENSURE_SUCCESS(rv, rv);
 
+  chan = doc->InterceptFetch(chan);
+
   // Referrer
   nsCOMPtr<nsIHttpChannel> httpChan(do_QueryInterface(chan));
   if (httpChan) {

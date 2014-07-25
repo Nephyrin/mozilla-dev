@@ -10137,6 +10137,7 @@ nsDocShell::OnWrappedChannelReady(nsIAlternateSourceChannel* aChannel)
 already_AddRefed<nsIChannel>
 nsDocShell::InterceptNavigation(nsIChannel* aChannel)
 {
+    fprintf(stderr, "NSM InterceptNavigation\n");
     MOZ_ASSERT(aChannel);
 
     nsCOMPtr<nsIChannel> result = aChannel;

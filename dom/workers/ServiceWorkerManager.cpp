@@ -1974,7 +1974,6 @@ NS_IMPL_ISUPPORTS_INHERITED0(ResponseResolvedHandler, PromiseNativeHandler)
  */
 class FetchEventRunnable : public WorkerRunnable
 {
-  nsMainThreadPtrHandle<nsIDocument> mDocument;
   nsMainThreadPtrHandle<nsIAlternateSourceChannel> mChannel;
 
   // Initialized on main thread, read on worker.
@@ -1985,12 +1984,10 @@ class FetchEventRunnable : public WorkerRunnable
 
 public:
   FetchEventRunnable(WorkerPrivate* aWorkerPrivate,
-                     const nsMainThreadPtrHandle<nsIDocument>& aDocument,
                      const nsMainThreadPtrHandle<nsIAlternateSourceChannel>& aChannel,
                      bool aIsTopLevel,
                      bool aIsNavigate)
     : WorkerRunnable(aWorkerPrivate, WorkerThreadUnchangedBusyCount),
-      mDocument(aDocument),
       mChannel(aChannel),
       mIsTopLevel(aIsTopLevel),
       mIsNavigate(aIsNavigate)
@@ -2091,57 +2088,6 @@ public:
   }
 };
 
-/*
-NS_IMETHODIMP
-ServiceWorkerManager::SendFetchEvent(nsIDocument* aOriginator,
-                                     nsIAlternateSourceChannel* aChannel)
-{
-  MOZ_ASSERT(NS_IsMainThread());
-  MOZ_ASSERT(aOriginator);
-  MOZ_ASSERT(aChannel);
-
-  ServiceWorkerRegistration* registration;
-  if (!FindPossibleController(aOriginator, &registration)) {
-    return NS_ERROR_NOT_AVAILABLE;
-  }
-
-  MOZ_ASSERT(registration);
-  ServiceWorkerInfo* current = registration->mCurrentWorker;
-  if (!current) {
-    return NS_ERROR_NOT_AVAILABLE;
-  }
-
-  // FIXME(nsm): If activating, wait.
-
-  nsRefPtr<ServiceWorker> serviceWorker;
-  nsresult rv = CreateServiceWorkerForDocument(aOriginator,
-                                               current->mScriptSpec,
-                                               registration->mScope,
-                                               getter_AddRefs(serviceWorker));
-  if (NS_WARN_IF(NS_FAILED(rv))) {
-    return NS_ERROR_FAILURE;
-  }
-
-  MOZ_ASSERT(serviceWorker);
-
-  // FIXME(nsm): If the fetch is for the service worker, pass through.
-  nsMainThreadPtrHandle<nsIDocument> mainThreadDocument =
-    new nsMainThreadPtrHolder<nsIDocument>(aOriginator);
-
-  nsMainThreadPtrHandle<nsIAlternateSourceChannel> mainThreadChannel =
-    new nsMainThreadPtrHolder<nsIAlternateSourceChannel>(aChannel);
-
-  nsRefPtr<FetchEventRunnable> fetch =
-    new FetchEventRunnable(serviceWorker->GetWorkerPrivate(), mainThreadDocument,
-                           mainThreadChannel, false, false);
-
-  AutoSafeJSContext cx;
-  if (!fetch->Dispatch(cx)) {
-    return NS_ERROR_FAILURE;
-  }
-  return NS_OK;
-}*/
-
 NS_IMETHODIMP
 ServiceWorkerManager::SendNavigationEvent(nsIAlternateSourceChannel* aChannel)
 {
@@ -2187,8 +2133,47 @@ ServiceWorkerManager::SendNavigationEvent(nsIAlternateSourceChannel* aChannel)
     new nsMainThreadPtrHolder<nsIAlternateSourceChannel>(aChannel);
 
   nsRefPtr<FetchEventRunnable> fetch =
-    new FetchEventRunnable(serviceWorker->GetWorkerPrivate(), nullptr,
+    new FetchEventRunnable(serviceWorker->GetWorkerPrivate(),
                            mainThreadChannel, true, true);
+
+  AutoSafeJSContext cx;
+  if (!fetch->Dispatch(cx)) {
+    return NS_ERROR_FAILURE;
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+ServiceWorkerManager::SendFetchEvent(nsIDOMWindow* aOriginator,
+                                     nsIAlternateSourceChannel* aChannel,
+                                     bool aIsTopLevel)
+{
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(aOriginator);
+  MOZ_ASSERT(aChannel);
+
+  nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(aOriginator);
+  MOZ_ASSERT(window);
+
+  // FIXME(nsm): If activating, wait.
+
+  nsCOMPtr<nsISupports> serviceWorkerISupports;
+  nsresult rv = GetDocumentController(aOriginator,
+                                      getter_AddRefs(serviceWorkerISupports));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return NS_ERROR_FAILURE;
+  }
+
+  nsRefPtr<ServiceWorker> serviceWorker = static_cast<ServiceWorker*>(serviceWorkerISupports.get());
+  MOZ_ASSERT(serviceWorker);
+
+  // FIXME(nsm): If the fetch is for the service worker, pass through.
+  nsMainThreadPtrHandle<nsIAlternateSourceChannel> mainThreadChannel =
+    new nsMainThreadPtrHolder<nsIAlternateSourceChannel>(aChannel);
+
+  nsRefPtr<FetchEventRunnable> fetch =
+    new FetchEventRunnable(serviceWorker->GetWorkerPrivate(),
+                           mainThreadChannel, aIsTopLevel, false);
 
   AutoSafeJSContext cx;
   if (!fetch->Dispatch(cx)) {

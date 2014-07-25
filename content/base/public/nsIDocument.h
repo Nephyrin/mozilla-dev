@@ -681,6 +681,8 @@ public:
     return mDidDocumentOpen;
   }
 
+  already_AddRefed<nsIChannel> InterceptFetch(nsIChannel* aChannel);
+
 protected:
   virtual Element *GetRootElementInternal() const = 0;
 

@@ -44,6 +44,7 @@ interface nsIServiceWorkerManager : nsISupports
   [noscript] nsISupports GetDocumentController(in nsIDOMWindow aWindow);
 
   void SendNavigationEvent(in nsIAlternateSourceChannel aChannel);
+  void SendFetchEvent(in nsIDOMWindow aOriginator, in nsIAlternateSourceChannel aChannel, in bool aIsTopLevel);
 
   // Testing
   DOMString getScopeForUrl(in DOMString path);

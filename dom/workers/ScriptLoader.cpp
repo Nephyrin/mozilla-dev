@@ -128,6 +128,10 @@ ChannelFromScriptURL(nsIPrincipal* principal,
                      flags, channelPolicy);
   NS_ENSURE_SUCCESS(rv, rv);
 
+  if (parentDoc) {
+    channel = parentDoc->InterceptFetch(channel);
+  }
+
   channel.forget(aChannel);
   return rv;
 }

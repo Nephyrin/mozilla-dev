@@ -1762,6 +1762,10 @@ nsXMLHttpRequest::Open(const nsACString& inMethod, const nsACString& url,
     }
   }
 
+  if (doc) {
+    mChannel = doc->InterceptFetch(mChannel);
+  }
+
   ChangeState(XML_HTTP_REQUEST_OPENED);
 
   return rv;

@@ -26,6 +26,17 @@ Response::Response(nsISupports* aOwner)
   SetIsDOMBinding();
 }
 
+Response::Response(const Response& aOther)
+  : Response(aOther.mOwner)
+{
+  mType = aOther.mType;
+  mUrl = aOther.mUrl;
+  mStatus = aOther.mStatus;
+  mStatusText = aOther.mStatusText;
+  mBody = aOther.mBody;
+  // We don't copy headers yet.
+}
+
 Response::~Response()
 {
 }

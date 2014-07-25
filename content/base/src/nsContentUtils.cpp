@@ -54,6 +54,7 @@
 #include "mozilla/Preferences.h"
 #include "mozilla/dom/Selection.h"
 #include "mozilla/TextEvents.h"
+#include "mozilla/unused.h"
 #include "nsAString.h"
 #include "nsAttrName.h"
 #include "nsAttrValue.h"
@@ -3048,8 +3049,9 @@ nsContentUtils::LoadImage(nsIURI* aURI, nsIDocument* aLoadingDocument,
 
   nsCOMPtr<nsILoadGroup> loadGroup = aLoadingDocument->GetDocumentLoadGroup();
 
-  nsIURI *documentURI = aLoadingDocument->GetDocumentURI();
+  nsIURI *documentURI = aLoadingDocument ? aLoadingDocument->GetDocumentURI() : nullptr;
 
+  mozilla::unused << documentURI;
   NS_ASSERTION(loadGroup || IsFontTableURI(documentURI),
                "Could not get loadgroup; onload may fire too early");
 
@@ -3073,7 +3075,7 @@ nsContentUtils::LoadImage(nsIURI* aURI, nsIDocument* aLoadingDocument,
   // XXXbz using "documentURI" for the initialDocumentURI is not quite
   // right, but the best we can do here...
   return imgLoader->LoadImage(aURI,                 /* uri to load */
-                              documentURI,          /* initialDocumentURI */
+                              aLoadingDocument,     /* initialDocument */
                               aReferrer,            /* referrer */
                               aLoadingPrincipal,    /* loading principal */
                               loadGroup,            /* loadgroup */

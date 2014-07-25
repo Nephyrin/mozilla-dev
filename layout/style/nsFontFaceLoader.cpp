@@ -353,6 +353,8 @@ nsUserFontSet::StartLoad(gfxMixedFontFamily* aFamily,
 
   NS_ENSURE_SUCCESS(rv, rv);
 
+  channel = ps->GetDocument()->InterceptFetch(channel);
+
   nsRefPtr<nsFontFaceLoader> fontLoader =
     new nsFontFaceLoader(aFamily, aProxy, aFontFaceSrc->mURI, this, channel);
 

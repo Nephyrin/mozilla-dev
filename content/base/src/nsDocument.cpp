@@ -225,6 +225,7 @@
 #include "mozilla/dom/DOMStringList.h"
 #include "nsWindowMemoryReporter.h"
 #include "nsLocation.h"
+#include "mozilla/net/AlternateSourceChannel.h"
 
 using namespace mozilla;
 using namespace mozilla::dom;
@@ -3172,6 +3173,92 @@ nsIDocument::GetSrcdocData(nsAString &aSrcdocData)
   }
   aSrcdocData = NullString();
   return NS_OK;
+}
+
+class PendingFetchEvent : public nsIAlternateSourceChannelListener
+{
+public:
+  NS_DECL_ISUPPORTS
+  NS_DECL_NSIALTERNATESOURCECHANNELLISTENER
+
+  PendingFetchEvent(nsIDocument* aDocument, bool aIsTopLevel)
+  : mDocument(aDocument), mIsTopLevel(aIsTopLevel) {}
+
+private:
+  virtual ~PendingFetchEvent()
+  { }
+
+  nsCOMPtr<nsIDocument> mDocument;
+  bool mIsTopLevel;
+};
+
+NS_IMPL_ISUPPORTS(PendingFetchEvent, nsIAlternateSourceChannelListener)
+
+NS_IMETHODIMP
+PendingFetchEvent::OnWrappedChannelReady(nsIAlternateSourceChannel* aChannel)
+{
+  nsCOMPtr<nsIServiceWorkerManager> manager =
+      do_GetService(SERVICEWORKERMANAGER_CONTRACTID);
+  if (manager) {
+    nsresult rv = manager->SendFetchEvent(mDocument->GetWindow(), aChannel,
+                                          mIsTopLevel);
+    if (rv == NS_OK) {
+    } else if (rv == NS_ERROR_NOT_AVAILABLE) {
+      aChannel->ForwardToOriginalChannel();
+    } else {
+      NS_WARN_IF(NS_FAILED(rv));
+    }
+  }
+  return NS_OK;
+}
+
+already_AddRefed<nsIChannel>
+nsIDocument::InterceptFetch(nsIChannel* aChannel)
+{
+  MOZ_ASSERT(aChannel);
+  nsCOMPtr<nsIChannel> result = aChannel;
+
+  // FIXME(nsm): If shift+reloading, ignore.
+
+  nsCOMPtr<nsIURI> originalURI;
+  nsresult rv = aChannel->GetOriginalURI(getter_AddRefs(originalURI));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return result.forget();
+  }
+
+  // FIXME(nsm): I'm sure there are more exceptions and a better way to test
+  // it.
+  bool dontIntercept;
+  rv = originalURI->SchemeIs("resource", &dontIntercept);
+  if (NS_WARN_IF(NS_FAILED(rv)) || dontIntercept) {
+    return result.forget();
+  }
+
+  rv = originalURI->SchemeIs("about", &dontIntercept);
+  if (NS_WARN_IF(NS_FAILED(rv)) || dontIntercept) {
+    return result.forget();
+  }
+
+  nsCOMPtr<nsIServiceWorkerManager> manager =
+      do_GetService(SERVICEWORKERMANAGER_CONTRACTID);
+  if (manager) {
+    // FIXME(nsm): Save attribute from MaybeStartControlling.
+    bool isTopLevel = false;
+
+    nsCOMPtr<nsIDocShell> docShell;
+    NS_QueryNotificationCallbacks(aChannel, docShell);
+    if (docShell) {
+      nsCOMPtr<nsIDocShellTreeItem> rootTreeItem;
+      docShell->GetSameTypeRootTreeItem(getter_AddRefs(rootTreeItem));
+      nsCOMPtr<nsIDocShell> rootDocShell = do_QueryInterface(rootTreeItem);
+      isTopLevel = rootDocShell == docShell;
+    }
+
+    nsRefPtr<PendingFetchEvent> event =
+      new PendingFetchEvent(this, isTopLevel);
+    result = new mozilla::net::AlternateSourceChannel(aChannel, event);
+  }
+  return result.forget();
 }
 
 NS_IMETHODIMP
