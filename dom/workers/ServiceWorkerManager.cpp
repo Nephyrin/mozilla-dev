@@ -8,6 +8,8 @@
 #include "nsIDOMEventTarget.h"
 #include "nsIDocument.h"
 #include "nsIScriptSecurityManager.h"
+#include "nsISeekableStream.h"
+#include "nsIUploadChannel.h"
 #include "nsPIDOMWindow.h"
 
 #include "jsapi.h"
@@ -1974,8 +1976,11 @@ class FetchEventRunnable : public WorkerRunnable
 {
   nsMainThreadPtrHandle<nsIDocument> mDocument;
   nsMainThreadPtrHandle<nsIAlternateSourceChannel> mChannel;
+
+  // Initialized on main thread, read on worker.
   bool mIsTopLevel;
   bool mIsNavigate;
+  mozilla::dom::RequestInit mRequestInit;
   nsCString mResourceURL;
 
 public:
@@ -1999,6 +2004,41 @@ public:
     wrappedChannel->GetURI(getter_AddRefs(resourceURI));
 
     resourceURI->GetSpec(mResourceURL);
+
+    nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(wrappedChannel);
+    MOZ_ASSERT(httpChannel);
+    httpChannel->GetRequestMethod(mRequestInit.mMethod.Value());
+
+    nsCOMPtr<nsIUploadChannel> uploadChannel = do_QueryInterface(httpChannel);
+    if (uploadChannel) {
+      nsCOMPtr<nsIInputStream> uploadStream;
+      uploadChannel->GetUploadStream(getter_AddRefs(uploadStream));
+
+      // Allows reading without consuming data so that it will be passed to the
+      // network when not handled by the ServiceWorker;
+      nsCOMPtr<nsISeekableStream> seekableStream = do_QueryInterface(uploadStream);
+      if (seekableStream) {
+        uint64_t length;
+        nsresult rv = uploadStream->Available(&length);
+        // Only if we can get the body.
+        if (NS_SUCCEEDED(rv) && length != 0) {
+          nsCString body;
+          rv = NS_ReadInputStreamToString(uploadStream, body, length);
+          if (NS_SUCCEEDED(rv)) {
+            // FIXME(nsm): Could this be a perf issue?
+            nsString asNSString = NS_ConvertUTF8toUTF16(body);
+            OwningArrayBufferOrArrayBufferViewOrBlobOrString& body =
+              mRequestInit.mBody.Construct();
+            body.SetAsString().Rebind(asNSString.Data(), asNSString.Length());
+          } else {
+            // FIXME(nsm): Should we abort the request or continue with empty
+            // body?
+          }
+        }
+
+        seekableStream->Seek(nsISeekableStream::NS_SEEK_SET, 0);
+      }
+    }
   }
 
   bool
@@ -2014,9 +2054,8 @@ public:
     RequestOrString info;
     info.SetAsString().Rebind(asNSString.Data(), asNSString.Length());
 
-    RequestInit init;
     nsRefPtr<mozilla::dom::Request> req =
-      mozilla::dom::Request::Constructor(globalObject, info, init, rv);
+      mozilla::dom::Request::Constructor(globalObject, info, mRequestInit, rv);
     ENSURE_SUCCESS(rv, false);
 
     FetchEventInit finit;
