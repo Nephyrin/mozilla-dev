@@ -9,12 +9,15 @@
 #include "nsAHttpTransaction.h"
 #include "nsIAlternateSourceChannel.h"
 #include "nsIChannel.h"
+#include "nsIHttpChannelInternal.h"
+#include "nsINetUtil.h"
 #include "nsIStreamListener.h"
 #include "nsCOMPtr.h"
 #include "nsAutoPtr.h"
 #include "nsString.h"
 
 class nsInputStreamPump;
+class nsILoadInfo;
 
 namespace mozilla {
 namespace net {
@@ -22,10 +25,10 @@ namespace net {
 class AlternateSourceChannel : public nsIChannel
                              , public nsIAlternateSourceChannel
                              , public nsIStreamListener
-                             , public nsAHttpSegmentWriter {
+                             , public nsAHttpSegmentWriter
+                             , public nsINetworklessChannelListener {
 public:
-  AlternateSourceChannel(nsIChannel* aWrappedChannel);
-  virtual ~AlternateSourceChannel();
+  AlternateSourceChannel(nsIChannel* aWrappedChannel, nsIAlternateSourceChannelListener* aCallback);
 
   NS_DECL_THREADSAFE_ISUPPORTS
   NS_DECL_NSIALTERNATESOURCECHANNEL
@@ -34,16 +37,17 @@ public:
   NS_DECL_NSISTREAMLISTENER
   NS_DECL_NSIREQUESTOBSERVER
   NS_DECL_NSAHTTPSEGMENTWRITER
+  NS_DECL_NSINETWORKLESSCHANNELLISTENER
 
 private:
+  virtual ~AlternateSourceChannel();
   nsCOMPtr<nsIChannel> mWrappedChannel;
+  nsCOMPtr<nsIAlternateSourceChannelListener> mCallback;
   nsCOMPtr<nsIStreamListener> mListener;
   nsCOMPtr<nsISupports> mContext;
   nsCOMPtr<nsIInputStream> mBody;
   nsRefPtr<nsInputStreamPump> mPump;
   nsresult mStatus;
-  uint32_t mSuspendCount;
-  int64_t mContentLength;
   bool mForwardToWrapped;
   bool mCanceled;
   bool mPending;

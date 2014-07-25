@@ -3,7 +3,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "mozilla/net/NeckoParent.h"
 #include "nsIHttpChannelInternal.h"
+#include "nsIHttpChannelChild.h"
+#include "nsILoadInfo.h"
 #include "nsInputStreamPump.h"
 #include "nsIOService.h"
 #include "AlternateSourceChannel.h"
@@ -12,28 +15,33 @@
 #include "nsHttpTransaction.h"
 #include "nsThreadUtils.h"
 
-//XXXjdm should probably make QI forward to mWrappedChannel for non-nsIChannel/nsISupports
-
 class nsIInterfaceRequestor;
 
 namespace mozilla {
 namespace net {
 
-NS_IMPL_ISUPPORTS3(AlternateSourceChannel,
-                   nsIChannel,
-                   nsIAlternateSourceChannel,
-                   nsIStreamListener)
+NS_IMPL_ADDREF(AlternateSourceChannel)
+NS_IMPL_RELEASE(AlternateSourceChannel)
 
-AlternateSourceChannel::AlternateSourceChannel(nsIChannel* aWrappedChannel)
+NS_IMPL_QUERY_HEAD(AlternateSourceChannel)
+  NS_IMPL_QUERY_BODY(nsIChannel)
+  NS_IMPL_QUERY_BODY(nsIAlternateSourceChannel)
+  NS_IMPL_QUERY_BODY(nsIStreamListener)
+  NS_IMPL_QUERY_BODY(nsINetworklessChannelListener)
+  NS_IMPL_QUERY_BODY_AMBIGUOUS(nsISupports, nsIChannel)
+NS_IMPL_QUERY_TAIL_USING_AGGREGATOR(mWrappedChannel)
+
+AlternateSourceChannel::AlternateSourceChannel(nsIChannel* aWrappedChannel,
+                                               nsIAlternateSourceChannelListener* aCallback)
 : mWrappedChannel(aWrappedChannel)
+, mCallback(aCallback)
 , mStatus(NS_OK)
-, mSuspendCount(0)
-, mContentLength(-1)
 , mForwardToWrapped(false)
 , mCanceled(false)
 , mPending(false)
 , mWasOpened(false)
 {
+    MOZ_ASSERT(mWrappedChannel);
 }
 
 AlternateSourceChannel::~AlternateSourceChannel()
@@ -123,22 +131,27 @@ AlternateSourceChannel::InitiateAlternateResponse(nsIInputStream* aBody)
 {
     mBody = aBody;
 
+    nsCOMPtr<nsIHttpChannelChild> httpChanChild = do_QueryInterface(mWrappedChannel);
+    if (httpChanChild) {
+        httpChanChild->SynthesizeResponse(aBody);
+        return NS_OK;
+    }
+
     nsCOMPtr<nsIHttpChannelInternal> httpChan = do_QueryInterface(mWrappedChannel);
     if (httpChan) {
         nsRefPtr<nsHttpTransaction> transaction;
         nsresult rv = httpChan->GetConnectionlessTransaction(getter_AddRefs(transaction));
         NS_ENSURE_SUCCESS(rv, rv);
-
         nsCOMPtr<nsIRunnable> event = new WriteSegmentsRunnable(transaction, this);
         rv = gSocketTransportService->Dispatch(event, NS_DISPATCH_NORMAL);
         NS_ENSURE_SUCCESS(rv, rv);
-    } else {
+        return NS_OK;
+    }
+
         nsresult rv = nsInputStreamPump::Create(getter_AddRefs(mPump), aBody);
         NS_ENSURE_SUCCESS(rv, rv);
         rv = mPump->AsyncRead(this, nullptr);
         NS_ENSURE_SUCCESS(rv, rv);
-    }
-
     return NS_OK;
 }
 
@@ -232,6 +245,26 @@ AlternateSourceChannel::Open(nsIInputStream** aStream)
   return NS_ERROR_NOT_AVAILABLE;
 }
 
+class ReadyNonHttpChannel : public nsRunnable
+{
+  nsRefPtr<AlternateSourceChannel> mChannel;
+
+public:
+  ReadyNonHttpChannel(AlternateSourceChannel* aChannel)
+    : mChannel(aChannel)
+  {
+    MOZ_ASSERT(NS_IsMainThread());
+  }
+
+  NS_IMETHODIMP
+  Run()
+  {
+    MOZ_ASSERT(NS_IsMainThread());
+    mChannel->OnNetworklessChannelReady();
+    return NS_OK;
+  }
+};
+
 NS_IMETHODIMP
 AlternateSourceChannel::AsyncOpen(nsIStreamListener* aListener, nsISupports* aContext)
 {
@@ -245,10 +278,12 @@ AlternateSourceChannel::AsyncOpen(nsIStreamListener* aListener, nsISupports* aCo
 
   nsCOMPtr<nsIHttpChannelInternal> httpChan = do_QueryInterface(mWrappedChannel);
   if (httpChan) {
-    httpChan->AsyncOpenNetworkless(aListener, aContext);
+    httpChan->AsyncOpenNetworkless(aListener, aContext, this);
   } else {
     mListener = aListener;
     mContext = aContext;
+    nsRefPtr<ReadyNonHttpChannel> r = new ReadyNonHttpChannel(this);
+    NS_DispatchToCurrentThread(r);
   }
   return NS_OK;
 }
@@ -357,8 +392,8 @@ AlternateSourceChannel::OnStartRequest(nsIRequest* aRequest, nsISupports* aConte
   MOZ_ASSERT(!mForwardToWrapped);
 
   nsresult rv = NS_OK;
-  if (mWrappedChannel) {
     nsCOMPtr<nsIStreamListener> listener = do_QueryInterface(mWrappedChannel);
+  if (listener) {
     rv = listener->OnStartRequest(this, mContext);
   }
   return rv;
@@ -373,8 +408,8 @@ AlternateSourceChannel::OnDataAvailable(nsIRequest* aRequest, nsISupports* aCont
   MOZ_ASSERT(!mForwardToWrapped);
 
   nsresult rv = NS_OK;
-  if (mWrappedChannel) {
     nsCOMPtr<nsIStreamListener> listener = do_QueryInterface(mWrappedChannel);
+  if (listener) {
     rv = listener->OnDataAvailable(this, mContext, aInputStream, aOffset, aCount);
   }
   return rv;
@@ -394,8 +429,8 @@ AlternateSourceChannel::OnStopRequest(nsIRequest* aRequest,
   mPending = false;
 
   nsresult rv = NS_OK;
-  if (mWrappedChannel) {
     nsCOMPtr<nsIStreamListener> listener = do_QueryInterface(mWrappedChannel);
+  if (listener) {
     rv = listener->OnStopRequest(this, mContext, aStatusCode);
   }
 
@@ -404,6 +439,28 @@ AlternateSourceChannel::OnStopRequest(nsIRequest* aRequest,
   mBody = nullptr;
   mPump = nullptr;
   return rv;
+}
+
+NS_IMETHODIMP
+AlternateSourceChannel::OnNetworklessChannelReady()
+{
+  if (mCallback) {
+    nsresult rv = mCallback->OnWrappedChannelReady(this);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+AlternateSourceChannel::GetLoadInfo(nsILoadInfo** aLoadInfo)
+{
+  return mWrappedChannel->GetLoadInfo(aLoadInfo);
+}
+
+NS_IMETHODIMP
+AlternateSourceChannel::SetLoadInfo(nsILoadInfo* aLoadInfo)
+{
+  return mWrappedChannel->SetLoadInfo(aLoadInfo);
 }
 
 } // namespace net

@@ -17,6 +17,7 @@
 #include "nsIProgressEventSink.h"
 #include "nsHttpChannel.h"
 #include "nsIAuthPromptProvider.h"
+#include "nsINetUtil.h"
 
 class nsICacheEntry;
 class nsIAssociatedContentSecurity;
@@ -37,6 +38,7 @@ class HttpChannelParent : public PHttpChannelParent
                         , public nsIProgressEventSink
                         , public nsIInterfaceRequestor
                         , public ADivertableParentChannel
+                        , public nsIAlternateSourceChannelListener
                         , public nsIAuthPromptProvider
 {
   virtual ~HttpChannelParent();
@@ -50,6 +52,7 @@ public:
   NS_DECL_NSIPROGRESSEVENTSINK
   NS_DECL_NSIINTERFACEREQUESTOR
   NS_DECL_NSIAUTHPROMPTPROVIDER
+  NS_DECL_NSIALTERNATESOURCECHANNELLISTENER
 
   HttpChannelParent(const PBrowserOrId& iframeEmbedding,
                     nsILoadContext* aLoadContext,
@@ -96,7 +99,8 @@ protected:
                    const bool&                chooseApplicationCache,
                    const nsCString&           appCacheClientID,
                    const bool&                allowSpdy,
-                   const OptionalFileDescriptorSet& aFds);
+                   const OptionalFileDescriptorSet& aFds,
+                   const bool&                delayTransaction);
 
   virtual bool RecvSetPriority(const uint16_t& priority) MOZ_OVERRIDE;
   virtual bool RecvSetCacheTokenCachedCharset(const nsCString& charset) MOZ_OVERRIDE;
@@ -115,6 +119,9 @@ protected:
                                          const uint32_t& count) MOZ_OVERRIDE;
   virtual bool RecvDivertOnStopRequest(const nsresult& statusCode) MOZ_OVERRIDE;
   virtual bool RecvDivertComplete() MOZ_OVERRIDE;
+  virtual bool RecvInitiateDelayedNetwork() MOZ_OVERRIDE;
+  virtual bool RecvSynthesizeResponse(const InputStreamParams& stream) MOZ_OVERRIDE;
+
   virtual void ActorDestroy(ActorDestroyReason why) MOZ_OVERRIDE;
 
   // Supporting function for ADivertableParentChannel.
@@ -127,7 +134,7 @@ protected:
   nsRefPtr<mozilla::dom::TabParent> mTabParent;
 
 private:
-  nsRefPtr<nsHttpChannel>       mChannel;
+  nsCOMPtr<nsIChannel> mChannel;
   nsCOMPtr<nsICacheEntry>       mCacheEntry;
   nsCOMPtr<nsIAssociatedContentSecurity>  mAssociatedContentSecurity;
   bool mIPCClosed;                // PHttpChannel actor has been Closed()

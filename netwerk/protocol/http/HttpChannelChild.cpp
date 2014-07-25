@@ -723,6 +723,40 @@ HttpChannelChild::DoNotifyListenerCleanup()
     PHttpChannelChild::Send__delete__(this);
 }
 
+class ReportRequestHeadersEvent : public ChannelEvent
+{
+ public:
+  ReportRequestHeadersEvent(HttpChannelChild* child,
+                            const nsHttpHeaderArray& requestHeaders)
+  : mChild(child)
+  , mRequestHeaders(requestHeaders) {}
+  void Run() { mChild->ReportRequestHeaders(mRequestHeaders); }
+ private:
+  HttpChannelChild* mChild;
+  nsHttpHeaderArray mRequestHeaders;
+};
+
+bool
+HttpChannelChild::RecvReportRequestHeaders(const nsHttpHeaderArray& requestHeaders)
+{
+  if (mEventQ->ShouldEnqueue()) {
+    mEventQ->Enqueue(new ReportRequestHeadersEvent(this, requestHeaders));
+  } else {
+    ReportRequestHeaders(requestHeaders);
+  }
+  return true;
+}
+
+void
+HttpChannelChild::ReportRequestHeaders(const nsHttpHeaderArray& requestHeaders)
+{
+  if (mDelayTransactionIndefinitely) {
+    mAllRequestHeaders = requestHeaders;
+  }
+  nsresult rv = mNetworklessCallback->OnNetworklessChannelReady();
+  NS_ENSURE_SUCCESS_VOID(rv);
+}
+
 class DeleteSelfEvent : public ChannelEvent
 {
  public:
@@ -1146,18 +1180,28 @@ HttpChannelChild::GetSecurityInfo(nsISupports **aSecurityInfo)
 NS_IMETHODIMP
 HttpChannelChild::AsyncOpenFinish()
 {
-  return NS_ERROR_FAILURE;
-}
-
-NS_IMETHODIMP
-HttpChannelChild::AsyncOpenNetworkless(nsIStreamListener *listener, nsISupports *aContext)
-{
-  return NS_ERROR_FAILURE;
+  MOZ_ASSERT(mDelayTransactionIndefinitely);
+  mDelayTransactionIndefinitely = false;
+  SendInitiateDelayedNetwork();
+  return NS_OK;
 }
 
 NS_IMETHODIMP
 HttpChannelChild::GetConnectionlessTransaction(nsHttpTransaction** aTransaction) {
   return NS_ERROR_NOT_AVAILABLE;
+}
+
+NS_IMETHODIMP
+HttpChannelChild::SynthesizeResponse(nsIInputStream* aStream)
+{
+  MOZ_ASSERT(mDelayTransactionIndefinitely);
+
+  ipc::InputStreamParams stream;
+  nsTArray<mozilla::ipc::FileDescriptor> fds;
+  SerializeInputStream(aStream, stream, fds);
+  MOZ_ASSERT(fds.IsEmpty());
+  SendSynthesizeResponse(stream);
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -1293,6 +1337,7 @@ HttpChannelChild::AsyncOpen(nsIStreamListener *listener, nsISupports *aContext)
   openArgs.chooseApplicationCache() = mChooseApplicationCache;
   openArgs.appCacheClientID() = appCacheClientId;
   openArgs.allowSpdy() = mAllowSpdy;
+  openArgs.delayTransaction() = mDelayTransactionIndefinitely;
 
   // The socket transport in the chrome process now holds a logical ref to us
   // until OnStopRequest, or we do a redirect, or we hit an IPDL error.
@@ -1347,6 +1392,23 @@ HttpChannelChild::RedirectTo(nsIURI *newURI)
 {
   // disabled until/unless addons run in child or something else needs this
   return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+HttpChannelChild::GetRequestHeader(const nsACString& aHeader,
+                                  nsACString& aValue)
+{
+  if (!mDelayTransactionIndefinitely) {
+    return HttpBaseChannel::GetRequestHeader(aHeader, aValue);
+  }
+
+  // XXX might be better to search the header list directly instead of
+  // hitting the http atom hash table.
+  nsHttpAtom atom = nsHttp::ResolveAtom(aHeader);
+  if (!atom)
+    return NS_ERROR_NOT_AVAILABLE;
+
+  return mAllRequestHeaders.GetHeader(atom, aValue);
 }
 
 //-----------------------------------------------------------------------------

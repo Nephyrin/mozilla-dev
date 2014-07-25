@@ -5,9 +5,16 @@
 
 #include "nsISupports.idl"
 
+interface nsIAlternateSourceChannel;
 interface nsIChannel;
 interface nsIURI;
 interface nsIPrefBranch;
+
+[scriptable, function, uuid(1e883bc8-c8e1-4604-98f1-97e5e8e9ef08)]
+interface nsIAlternateSourceChannelListener : nsISupports
+{
+    void onWrappedChannelReady(in nsIAlternateSourceChannel aChannel);
+};
 
 /**
  * nsINetUtil provides various network-related utility methods.
@@ -194,5 +201,6 @@ interface nsINetUtil : nsISupports
                                         out long aCharsetStart,
                                         out long aCharsetEnd);
 
-  nsIChannel createAlternateSourceChannel(in nsIChannel aChannel);
+  nsIChannel createAlternateSourceChannel(in nsIChannel aChannel,
+                                          in nsIAlternateSourceChannelListener aListener);
 };

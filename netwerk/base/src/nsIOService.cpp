@@ -1221,9 +1221,10 @@ nsIOService::ExtractCharsetFromContentType(const nsACString &aTypeHeader,
 
 NS_IMETHODIMP
 nsIOService::CreateAlternateSourceChannel(nsIChannel* aChannel,
+                                          nsIAlternateSourceChannelListener* aListener,
                                           nsIChannel** aWrappedChannel)
 {
-    nsCOMPtr<nsIChannel> wrapper = new AlternateSourceChannel(aChannel);
+    nsCOMPtr<nsIChannel> wrapper = new AlternateSourceChannel(aChannel, aListener);
     wrapper.forget(aWrappedChannel);
     return NS_OK;
 }

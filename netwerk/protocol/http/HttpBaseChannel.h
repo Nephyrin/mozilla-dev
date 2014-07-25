@@ -145,6 +145,8 @@ public:
   NS_IMETHOD GetResponseStatusText(nsACString& aValue);
   NS_IMETHOD GetRequestSucceeded(bool *aValue);
   NS_IMETHOD RedirectTo(nsIURI *newURI);
+  NS_IMETHOD AsyncOpenNetworkless(nsIStreamListener *listener, nsISupports *aContext,
+                                  nsINetworklessChannelListener *callback);
 
   // nsIHttpChannelInternal
   NS_IMETHOD GetDocumentURI(nsIURI **aDocumentURI);
@@ -291,6 +293,7 @@ protected:
   nsAutoPtr<nsHttpResponseHead>     mResponseHead;
   nsRefPtr<nsHttpConnectionInfo>    mConnectionInfo;
   nsCOMPtr<nsIProxyInfo>            mProxyInfo;
+  nsCOMPtr<nsINetworklessChannelListener> mNetworklessCallback;
 
   nsCString                         mSpec; // ASCII encoded URL spec
   nsCString                         mContentTypeHint;
@@ -338,6 +341,8 @@ protected:
   uint32_t                          mResponseTimeoutEnabled     : 1;
   // A flag that should be false only if a cross-domain redirect occurred
   uint32_t                          mAllRedirectsSameOrigin     : 1;
+  // whether to postpone initiating the transaction
+  uint32_t                          mDelayTransactionIndefinitely : 1;
 
   // Current suspension depth for this channel object
   uint32_t                          mSuspendCount;

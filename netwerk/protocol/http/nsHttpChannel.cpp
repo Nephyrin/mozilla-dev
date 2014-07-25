@@ -227,7 +227,6 @@ nsHttpChannel::nsHttpChannel()
     , mConcurentCacheAccess(0)
     , mIsPartialRequest(0)
     , mHasAutoRedirectVetoNotifier(0)
-    , mDelayTransactionIndefinitely(false)
     , mDidReval(false)
 {
     LOG(("Creating nsHttpChannel [this=%p]\n", this));
@@ -417,6 +416,10 @@ nsHttpChannel::ContinueConnect()
     uint32_t suspendCount = mSuspendCount;
     while (suspendCount--)
         mTransactionPump->Suspend();
+
+    if (mDelayTransactionIndefinitely && mNetworklessCallback) {
+        mNetworklessCallback->OnNetworklessChannelReady();
+    }
 
     return NS_OK;
 }
@@ -4603,15 +4606,9 @@ nsHttpChannel::GetConnectionlessTransaction(nsHttpTransaction** aTransaction) {
 }
 
 NS_IMETHODIMP
-nsHttpChannel::AsyncOpenNetworkless(nsIStreamListener *listener, nsISupports *context)
-{
-    mDelayTransactionIndefinitely = true;
-    return AsyncOpen(listener, context);
-}
-
-NS_IMETHODIMP
 nsHttpChannel::AsyncOpenFinish()
 {
+    MOZ_ASSERT(mDelayTransactionIndefinitely);
     mDelayTransactionIndefinitely = false;
     //TODO: open cache entry?
     //TODO: speculatively connect?

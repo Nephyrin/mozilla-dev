@@ -74,13 +74,13 @@ public:
                               const nsACString& aValue,
                               bool aMerge);
   NS_IMETHOD RedirectTo(nsIURI *newURI);
+  NS_IMETHOD GetRequestHeader(const nsACString& aHeader, nsACString& aValue);
   // nsIHttpChannelInternal
   NS_IMETHOD SetupFallbackChannel(const char *aFallbackKey);
   NS_IMETHOD GetLocalAddress(nsACString& addr);
   NS_IMETHOD GetLocalPort(int32_t* port);
   NS_IMETHOD GetRemoteAddress(nsACString& addr);
   NS_IMETHOD GetRemotePort(int32_t* port);
-  NS_IMETHOD AsyncOpenNetworkless(nsIStreamListener *listener, nsISupports *aContext);
   NS_IMETHOD AsyncOpenFinish();
   NS_IMETHOD GetConnectionlessTransaction(nsHttpTransaction** aTransaction);
   // nsISupportsPriority
@@ -132,12 +132,14 @@ protected:
   bool RecvFlushedForDiversion() MOZ_OVERRIDE;
   bool RecvDivertMessages() MOZ_OVERRIDE;
   bool RecvDeleteSelf() MOZ_OVERRIDE;
+  bool RecvReportRequestHeaders(const nsHttpHeaderArray& requestHeaders);
 
   bool GetAssociatedContentSecurity(nsIAssociatedContentSecurity** res = nullptr);
   virtual void DoNotifyListenerCleanup();
 
 private:
   RequestHeaderTuples mClientSetRequestHeaders;
+  nsHttpHeaderArray mAllRequestHeaders;
   nsCOMPtr<nsIChildChannel> mRedirectChannelChild;
   nsCOMPtr<nsISupports> mSecurityInfo;
 
@@ -196,6 +198,7 @@ private:
                       const nsHttpResponseHead& responseHead);
   void Redirect3Complete();
   void DeleteSelf();
+  void ReportRequestHeaders(const nsHttpHeaderArray& requestHeaders);
 
   friend class AssociateApplicationCacheEvent;
   friend class StartRequestEvent;
@@ -207,6 +210,7 @@ private:
   friend class Redirect1Event;
   friend class Redirect3Event;
   friend class DeleteSelfEvent;
+  friend class ReportRequestHeadersEvent;
   friend class HttpAsyncAborter<HttpChannelChild>;
 };
 

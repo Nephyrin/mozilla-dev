@@ -49,6 +49,7 @@ struct HttpChannelOpenArgs
   nsCString                   appCacheClientID;
   bool                        allowSpdy;
   OptionalFileDescriptorSet   fds;
+  bool                        delayTransaction;
 };
 
 struct HttpChannelConnectArgs

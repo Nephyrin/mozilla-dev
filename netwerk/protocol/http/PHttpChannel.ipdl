@@ -77,6 +77,13 @@ parent:
   // Child has no more events/messages to divert to the parent.
   DivertComplete();
 
+  // Initiate a postponed transaction
+  InitiateDelayedNetwork();
+
+  // Notify child that no response is forthcoming and one should be synthesized from
+  // the provided input stream.
+  SynthesizeResponse(InputStreamParams stream);
+
   __delete__();
 
 child:
@@ -137,6 +144,9 @@ child:
   // Tell child to delete channel (all IPDL deletes must be done from child to
   // avoid races: see bug 591708).
   DeleteSelf();
+
+  // Inform child of all headers set on request by parent
+  ReportRequestHeaders(nsHttpHeaderArray requestHeaders);
 };
 
 

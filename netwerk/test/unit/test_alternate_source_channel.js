@@ -46,13 +46,15 @@ function run_test() {
 add_test(function() {
   var chan = make_channel(URL + '/body');
   var ios = Cc["@mozilla.org/network/io-service;1"].getService(Ci.nsIIOService);
-  chan = ios.QueryInterface(Ci.nsINetUtil).createAlternateSourceChannel(chan);
-  chan.QueryInterface(Ci.nsIAlternateSourceChannel);
-  chan.asyncOpen(new ChannelListener(handle_synthesized_response, null), null);
+  chan = ios.QueryInterface(Ci.nsINetUtil).createAlternateSourceChannel(chan,
+           function() {
   var synthesized = Cc["@mozilla.org/io/string-input-stream;1"]
                       .createInstance(Ci.nsIStringInputStream);
   synthesized.data = NON_REMOTE_RESPONSE;
   chan.initiateAlternateResponse(synthesized);
+           });
+  chan.QueryInterface(Ci.nsIAlternateSourceChannel);
+  chan.asyncOpen(new ChannelListener(handle_synthesized_response, null), null);
 });
 
 function handle_synthesized_response(request, buffer) {
@@ -63,10 +65,12 @@ function handle_synthesized_response(request, buffer) {
 add_test(function() {
   var chan = make_channel(URL + '/body');
   var ios = Cc["@mozilla.org/network/io-service;1"].getService(Ci.nsIIOService);
-  chan = ios.QueryInterface(Ci.nsINetUtil).createAlternateSourceChannel(chan);
+  chan = ios.QueryInterface(Ci.nsINetUtil).createAlternateSourceChannel(chan,
+           function() {
+             do_execute_soon(function() { chan.forwardToOriginalChannel(); });
+           });
   chan.QueryInterface(Ci.nsIAlternateSourceChannel);
   chan.asyncOpen(new ChannelListener(handle_remote_response, null), null);
-  do_execute_soon(function() { chan.forwardToOriginalChannel(); });
 });
 
 function handle_remote_response(request, buffer) {

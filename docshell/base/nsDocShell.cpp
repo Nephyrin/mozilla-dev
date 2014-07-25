@@ -10100,8 +10100,8 @@ nsDocShell::DoURILoad(nsIURI * aURI,
 
     //TODO(jdm): Check document for presence of navigation controller
     if (false) {
-        channel = new AlternateSourceChannel(channel);
-        //TODO(jdm): inform navigation controller about channel
+        channel = new AlternateSourceChannel(channel, nullptr);
+        //TODO(jdm): inform navigation controller about channel, probably via listener param
     }
 
     rv = DoChannelLoad(channel, uriLoader, aBypassClassifier);

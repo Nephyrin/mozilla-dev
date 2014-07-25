@@ -38,6 +38,12 @@ interface nsIHttpUpgradeListener : nsISupports
                               in nsIAsyncOutputStream aSocketOut);
 };
 
+[scriptable, function, uuid(1e883bc8-c8e1-4604-98f1-97e5e8e9ef08)]
+interface nsINetworklessChannelListener : nsISupports
+{
+    void onNetworklessChannelReady();
+};
+
 /**
  * Dumping ground for http.  This interface will never be frozen.  If you are
  * using any feature exposed by this interface, be aware that this interface
@@ -188,7 +194,8 @@ interface nsIHttpChannelInternal : nsISupports
     attribute boolean loadUnblocked;
 
     readonly attribute nsHttpTransactionPtr connectionlessTransaction;
-    void asyncOpenNetworkless(in nsIStreamListener listener, in nsISupports context);
+    void asyncOpenNetworkless(in nsIStreamListener listener, in nsISupports context,
+                              in nsINetworklessChannelListener callback);
     void asyncOpenFinish();
     /**
      * This attribute en/disables the timeout for the first byte of an HTTP

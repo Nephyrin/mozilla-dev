@@ -5,6 +5,8 @@
 
 #include "nsISupports.idl"
 
+interface nsIInputStream;
+
 [ptr] native RequestHeaderTuples(mozilla::net::RequestHeaderTuples);
 
 [uuid(306ACF4D-C6DF-4EF6-BDA9-5CB92E83EDD9)]
@@ -14,4 +16,6 @@ interface nsIHttpChannelChild : nsISupports
 
   // Headers that the channel client has set via SetRequestHeader.
   readonly attribute RequestHeaderTuples clientSetRequestHeaders;
+
+  void synthesizeResponse(in nsIInputStream stream);
 };

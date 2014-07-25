@@ -65,6 +65,7 @@ HttpBaseChannel::HttpBaseChannel()
   , mLoadUnblocked(false)
   , mResponseTimeoutEnabled(true)
   , mAllRedirectsSameOrigin(true)
+  , mDelayTransactionIndefinitely(false)
   , mSuspendCount(0)
   , mProxyResolveFlags(0)
   , mContentDispositionHint(UINT32_MAX)
@@ -1299,6 +1300,15 @@ HttpBaseChannel::RedirectTo(nsIURI *newURI)
   mAPIRedirectToURI = newURI;
 
   return NS_OK;
+}
+
+NS_IMETHODIMP
+HttpBaseChannel::AsyncOpenNetworkless(nsIStreamListener *listener, nsISupports *context,
+                                      nsINetworklessChannelListener *callback)
+{
+  mDelayTransactionIndefinitely = true;
+  mNetworklessCallback = callback;
+  return AsyncOpen(listener, context);
 }
 
 //-----------------------------------------------------------------------------
