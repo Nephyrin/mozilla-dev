@@ -189,6 +189,7 @@
 #include "mozilla/dom/MessagePort.h"
 #include "mozilla/dom/MessagePortBinding.h"
 #include "mozilla/dom/indexedDB/IDBFactory.h"
+#include "mozilla/dom/Promise.h"
 #include "mozilla/dom/quota/QuotaManager.h"
 
 #include "mozilla/dom/StructuredCloneTags.h"
@@ -6417,6 +6418,12 @@ nsGlobalWindow::Confirm(const nsAString& aString, bool* aReturn)
   *aReturn = Confirm(aString, rv);
 
   return rv.ErrorCode();
+}
+
+already_AddRefed<Promise>
+nsGlobalWindow::Fetch(const RequestOrString& aInput, const RequestInit& aInit)
+{
+  return nullptr;
 }
 
 void

@@ -26,3 +26,11 @@ interface FetchBodyStream {
   // Promise<ScalarValueString>
   Promise asText();
 };
+
+[NoInterfaceObject,
+ Pref="dom.fetch.enabled"]
+interface GlobalFetch {
+  // Promise<Response>
+  Promise fetch(RequestInfo input, optional RequestInit init);
+};
+

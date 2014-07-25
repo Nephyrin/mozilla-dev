@@ -37,6 +37,7 @@ partial interface WorkerGlobalScope {
 
 WorkerGlobalScope implements WindowTimers;
 WorkerGlobalScope implements WindowBase64;
+WorkerGlobalScope implements GlobalFetch;
 
 // Mozilla extensions
 partial interface WorkerGlobalScope {

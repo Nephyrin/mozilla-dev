@@ -38,6 +38,7 @@
 #include "nsSize.h"
 #include "mozFlushType.h"
 #include "prclist.h"
+#include "mozilla/dom/RequestBinding.h"
 #include "mozilla/dom/StorageEvent.h"
 #include "mozilla/dom/StorageEventBinding.h"
 #include "nsFrameMessageManager.h"
@@ -51,6 +52,7 @@
 #include "mozilla/dom/EventTarget.h"
 #include "Units.h"
 #include "nsComponentManagerUtils.h"
+#include "mozilla/dom/UnionTypes.h"
 
 #ifdef MOZ_B2G
 #include "nsIDOMWindowB2G.h"
@@ -115,6 +117,7 @@ class Gamepad;
 class MediaQueryList;
 class Navigator;
 class OwningExternalOrWindowProxy;
+class Promise;
 class Selection;
 class SpeechSynthesis;
 class WakeLock;
@@ -881,6 +884,8 @@ public:
   void Alert(mozilla::ErrorResult& aError);
   void Alert(const nsAString& aMessage, mozilla::ErrorResult& aError);
   bool Confirm(const nsAString& aMessage, mozilla::ErrorResult& aError);
+  already_AddRefed<mozilla::dom::Promise> Fetch(const mozilla::dom::RequestOrString& aInput,
+                                                const mozilla::dom::RequestInit& aInit);
   void Prompt(const nsAString& aMessage, const nsAString& aInitial,
               nsAString& aReturn, mozilla::ErrorResult& aError);
   void Print(mozilla::ErrorResult& aError);
