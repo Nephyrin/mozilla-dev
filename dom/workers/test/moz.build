@@ -6,6 +6,7 @@
 
 DIRS += [
     'extensions',
+    'fetch',
     'serviceworkers',
 ]
 
