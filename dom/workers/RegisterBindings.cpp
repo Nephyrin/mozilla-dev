@@ -24,6 +24,7 @@
 #include "mozilla/dom/MessagePortBinding.h"
 #include "mozilla/dom/PromiseBinding.h"
 #include "mozilla/dom/RequestBinding.h"
+#include "mozilla/dom/ResponseBinding.h"
 #include "mozilla/dom/TextDecoderBinding.h"
 #include "mozilla/dom/TextEncoderBinding.h"
 #include "mozilla/dom/XMLHttpRequestBinding.h"
@@ -83,7 +84,8 @@ WorkerPrivate::RegisterBindings(JSContext* aCx, JS::Handle<JSObject*> aGlobal)
 
   if (DOMFetchEnabled()) {
    if (!HeadersBinding::GetConstructorObject(aCx, aGlobal) ||
-       !RequestBinding::GetConstructorObject(aCx, aGlobal)) {
+       !RequestBinding::GetConstructorObject(aCx, aGlobal) ||
+       !ResponseBinding::GetConstructorObject(aCx, aGlobal)) {
       return false;
     }
   }

@@ -16,5 +16,6 @@ function isnot(a, b, msg) {
 onmessage = function() {
   ok(typeof HeaderMap === "function", "HeaderMap should be defined");
   ok(typeof Request === "function", "Request should be defined");
+  ok(typeof Response === "function", "Response should be defined");
   postMessage({ type: 'finish' });
 }
