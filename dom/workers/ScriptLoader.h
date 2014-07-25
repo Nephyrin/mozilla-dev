@@ -35,6 +35,7 @@ ChannelFromScriptURLMainThread(nsIPrincipal* aPrincipal,
                                nsIURI* aBaseURI,
                                nsIDocument* aParentDoc,
                                const nsAString& aScriptURL,
+                               bool aIsServiceWorker,
                                nsIChannel** aChannel);
 
 nsresult

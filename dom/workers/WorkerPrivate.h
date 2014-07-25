@@ -820,8 +820,8 @@ public:
 
   static nsresult
   GetLoadInfo(JSContext* aCx, nsPIDOMWindow* aWindow, WorkerPrivate* aParent,
-              const nsAString& aScriptURL, bool aIsChromeWorker,
-              LoadInfo* aLoadInfo);
+              const nsAString& aScriptURL, WorkerType aWorkerType,
+              bool aIsChromeWorker, LoadInfo* aLoadInfo);
 
   void
   DoRunLoop(JSContext* aCx);

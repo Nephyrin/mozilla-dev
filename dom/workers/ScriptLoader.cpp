@@ -54,6 +54,7 @@ ChannelFromScriptURL(nsIPrincipal* principal,
                      nsIScriptSecurityManager* secMan,
                      const nsAString& aScriptURL,
                      bool aIsWorkerScript,
+                     bool aIsServiceWorker,
                      nsIChannel** aChannel)
 {
   AssertIsOnMainThread();
@@ -128,7 +129,7 @@ ChannelFromScriptURL(nsIPrincipal* principal,
                      flags, channelPolicy);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  if (parentDoc) {
+  if (!aIsServiceWorker && parentDoc) {
     channel = parentDoc->InterceptFetch(channel);
   }
 
@@ -383,6 +384,7 @@ private:
       if (!channel) {
         rv = ChannelFromScriptURL(principal, baseURI, parentDoc, loadGroup, ios,
                                   secMan, loadInfo.mURL, mIsWorkerScript,
+                                                mWorkerPrivate->IsServiceWorker(),
                                                 getter_AddRefs(channel));
         if (NS_FAILED(rv)) {
           return rv;
@@ -656,6 +658,7 @@ public:
     mResult =
       scriptloader::ChannelFromScriptURLMainThread(principal, baseURI,
                                                    parentDoc, mScriptURL,
+                                                   false,
                                                    getter_AddRefs(channel));
     if (NS_SUCCEEDED(mResult)) {
       channel.forget(mChannel);
@@ -840,6 +843,7 @@ ChannelFromScriptURLMainThread(nsIPrincipal* aPrincipal,
                                nsIURI* aBaseURI,
                                nsIDocument* aParentDoc,
                                const nsAString& aScriptURL,
+                               bool aIsServiceWorker,
                                nsIChannel** aChannel)
 {
   AssertIsOnMainThread();
@@ -855,7 +859,7 @@ ChannelFromScriptURLMainThread(nsIPrincipal* aPrincipal,
   NS_ASSERTION(secMan, "This should never be null!");
 
   return ChannelFromScriptURL(aPrincipal, aBaseURI, aParentDoc, loadGroup,
-                              ios, secMan, aScriptURL, true, aChannel);
+                              ios, secMan, aScriptURL, true, aIsServiceWorker, aChannel);
 }
 
 nsresult

@@ -3670,7 +3670,8 @@ WorkerPrivate::Constructor(JSContext* aCx,
     stackLoadInfo.construct();
 
     nsresult rv = GetLoadInfo(aCx, nullptr, parent, aScriptURL,
-                              aIsChromeWorker, stackLoadInfo.addr());
+                              aWorkerType, aIsChromeWorker,
+                              stackLoadInfo.addr());
     if (NS_FAILED(rv)) {
       scriptloader::ReportLoadError(aCx, aScriptURL, rv, !parent);
       aRv.Throw(rv);
@@ -3723,7 +3724,8 @@ WorkerPrivate::Constructor(JSContext* aCx,
 nsresult
 WorkerPrivate::GetLoadInfo(JSContext* aCx, nsPIDOMWindow* aWindow,
                            WorkerPrivate* aParent, const nsAString& aScriptURL,
-                           bool aIsChromeWorker, LoadInfo* aLoadInfo)
+                           WorkerType aWorkerType, bool aIsChromeWorker,
+                           LoadInfo* aLoadInfo)
 {
   using namespace mozilla::dom::workers::scriptloader;
 
@@ -3738,6 +3740,7 @@ WorkerPrivate::GetLoadInfo(JSContext* aCx, nsPIDOMWindow* aWindow,
   nsresult rv;
 
   if (aParent) {
+    MOZ_ASSERT(aWorkerType != WorkerTypeService);
     aParent->AssertIsOnWorkerThread();
 
     // If the parent is going away give up now.
@@ -3941,6 +3944,7 @@ WorkerPrivate::GetLoadInfo(JSContext* aCx, nsPIDOMWindow* aWindow,
 
     rv = ChannelFromScriptURLMainThread(loadInfo.mPrincipal, loadInfo.mBaseURI,
                                         document, aScriptURL,
+                                        aWorkerType == WorkerTypeService,
                                         getter_AddRefs(loadInfo.mChannel));
     NS_ENSURE_SUCCESS(rv, rv);
 
