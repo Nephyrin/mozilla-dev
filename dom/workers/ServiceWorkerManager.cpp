@@ -4,6 +4,7 @@
 
 #include "ServiceWorkerManager.h"
 
+#include "nsIAlternateSourceChannel.h"
 #include "nsIDOMEventTarget.h"
 #include "nsIDocument.h"
 #include "nsIScriptSecurityManager.h"
@@ -14,8 +15,14 @@
 #include "mozilla/dom/BindingUtils.h"
 #include "mozilla/dom/DOMError.h"
 #include "mozilla/dom/ErrorEvent.h"
+#include "mozilla/dom/FetchEvent.h"
 #include "mozilla/dom/InstallEventBinding.h"
 #include "mozilla/dom/PromiseNativeHandler.h"
+#include "mozilla/dom/Request.h"
+#include "mozilla/dom/RequestBinding.h"
+#include "mozilla/dom/Response.h"
+#include "mozilla/dom/UnionTypes.h"
+#include "mozilla/dom/UnionConversions.h"
 
 #include "nsContentUtils.h"
 #include "nsCxPusher.h"
@@ -1811,4 +1818,365 @@ ServiceWorkerManager::InvalidateServiceWorkerContainerWorker(ServiceWorkerRegist
   }
 }
 
+class NormalFetchRunnable : public nsRunnable
+{
+public:
+  NormalFetchRunnable(const nsMainThreadPtrHandle<nsIAlternateSourceChannel>& aChannel)
+    : mChannel(aChannel)
+  {
+  }
+
+  ~NormalFetchRunnable()
+  {
+  }
+
+  NS_IMETHODIMP
+  Run()
+  {
+    // Forward to original and release the channel.
+    MOZ_ASSERT(NS_IsMainThread());
+    mChannel->ForwardToOriginalChannel();
+    return NS_OK;
+  }
+private:
+  nsMainThreadPtrHandle<nsIAlternateSourceChannel> mChannel;
+};
+
+class InterceptedFetchRunnable : public nsRunnable
+{
+public:
+  InterceptedFetchRunnable(const nsMainThreadPtrHandle<nsIAlternateSourceChannel>& aChannel,
+                           const nsAString& aResponse)
+    : mChannel(aChannel),
+      mResponse(aResponse)
+  {
+    MOZ_ASSERT(!NS_IsMainThread());
+  }
+
+  ~InterceptedFetchRunnable()
+  {
+  }
+
+  NS_IMETHODIMP
+  Run()
+  {
+    // Forward to original and release the channel.
+    MOZ_ASSERT(NS_IsMainThread());
+
+    nsCOMPtr<nsIInputStream> stream;
+    NS_NewStringInputStream(getter_AddRefs(stream), mResponse);
+    mChannel->InitiateAlternateResponse(stream);
+    return NS_OK;
+  }
+private:
+  nsMainThreadPtrHandle<nsIAlternateSourceChannel> mChannel;
+  nsString mResponse;
+};
+
+class InterceptedFetchHandler : public PromiseNativeHandler
+{
+public:
+  NS_DECL_ISUPPORTS_INHERITED
+
+  InterceptedFetchHandler(const nsMainThreadPtrHandle<nsIAlternateSourceChannel>& aChannel)
+    : mChannel(aChannel)
+  {
+  }
+
+  void
+  ResolvedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue) MOZ_OVERRIDE
+  {
+    MOZ_ASSERT(aValue.isString());
+    nsString body;
+    if (!ConvertJSValueToString(aCx, aValue, eStringify, eStringify, body)) {
+      // Handle failure.
+      MOZ_CRASH("Handle conversion failure");
+    }
+    nsCOMPtr<nsIRunnable> interceptedFetch = new InterceptedFetchRunnable(mChannel, body);
+    NS_DispatchToMainThread(interceptedFetch);
+  }
+
+  void
+  RejectedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue) MOZ_OVERRIDE
+  {
+    MOZ_CRASH("Should not reach here");
+  }
+
+private:
+  ~InterceptedFetchHandler()
+  {
+  }
+
+  nsMainThreadPtrHandle<nsIAlternateSourceChannel> mChannel;
+};
+NS_IMPL_ISUPPORTS_INHERITED0(InterceptedFetchHandler, PromiseNativeHandler)
+
+class ResponseResolvedHandler MOZ_FINAL : public PromiseNativeHandler
+{
+public:
+  NS_DECL_ISUPPORTS_INHERITED
+
+  ResponseResolvedHandler(const nsMainThreadPtrHandle<nsIAlternateSourceChannel>& aChannel)
+    : mChannel(aChannel)
+  {
+    fprintf(stderr, "NSM ResponseResolvedHandler created\n");
+    MOZ_ASSERT(!NS_IsMainThread());
+  }
+
+  void
+  ResolvedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue) MOZ_OVERRIDE
+  {
+    fprintf(stderr, "NSM ResponseResolvedHandler::ResolvedCallback\n");
+    if (aValue.isObject()) {
+      JS::Rooted<JSObject*> valueObj(aCx, &aValue.toObject());
+      Response* response;
+      nsresult rv = UNWRAP_OBJECT(Response, valueObj, response);
+
+      if (NS_SUCCEEDED(rv)) {
+        nsRefPtr<Response> r = response;
+        nsRefPtr<FetchBodyStream> body = r->Body();
+        nsRefPtr<Promise> asTextPromise = body->AsText();
+        nsRefPtr<PromiseNativeHandler> interceptedFetchHandler = new InterceptedFetchHandler(mChannel);
+        asTextPromise->AppendNativeHandler(interceptedFetchHandler);
+        return;
+      }
+      // FIXME(nsm): Handle type error.
+    }
+
+    // FIXME(nsm): Handle type error.
+  }
+
+  void
+  RejectedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue) MOZ_OVERRIDE
+  {
+    fprintf(stderr, "NSM ResponseResolvedHandler::RejectedCallback\n");
+    // FIXME(nsm): Report NetworkError!
+    // FIXME(nsm): Report error in console.
+    nsCOMPtr<nsIRunnable> r = new NormalFetchRunnable(mChannel);
+    NS_DispatchToMainThread(r);
+  }
+
+private:
+  ~ResponseResolvedHandler()
+  {
+  }
+
+  nsMainThreadPtrHandle<nsIAlternateSourceChannel> mChannel;
+};
+
+NS_IMPL_ISUPPORTS_INHERITED0(ResponseResolvedHandler, PromiseNativeHandler)
+
+/*
+ * The FetchEvent doesn't need the channel, so it never interacts with the
+ * worker thread. Once the response is received, we pass on the channel.
+ */
+class FetchEventRunnable : public WorkerRunnable
+{
+  nsMainThreadPtrHandle<nsIDocument> mDocument;
+  nsMainThreadPtrHandle<nsIAlternateSourceChannel> mChannel;
+  bool mIsTopLevel;
+  bool mIsNavigate;
+  nsCString mResourceURL;
+
+public:
+  FetchEventRunnable(WorkerPrivate* aWorkerPrivate,
+                     const nsMainThreadPtrHandle<nsIDocument>& aDocument,
+                     const nsMainThreadPtrHandle<nsIAlternateSourceChannel>& aChannel,
+                     bool aIsTopLevel,
+                     bool aIsNavigate)
+    : WorkerRunnable(aWorkerPrivate, WorkerThreadUnchangedBusyCount),
+      mDocument(aDocument),
+      mChannel(aChannel),
+      mIsTopLevel(aIsTopLevel),
+      mIsNavigate(aIsNavigate)
+  {
+    MOZ_ASSERT(NS_IsMainThread());
+    nsCOMPtr<nsIChannel> wrappedChannel;
+    mChannel->GetWrappedChannel(getter_AddRefs(wrappedChannel));
+    MOZ_ASSERT(wrappedChannel);
+
+    nsCOMPtr<nsIURI> resourceURI;
+    wrappedChannel->GetURI(getter_AddRefs(resourceURI));
+
+    resourceURI->GetSpec(mResourceURL);
+  }
+
+  bool
+  WorkerRun(JSContext* aCx, WorkerPrivate* aWorkerPrivate)
+  {
+    MOZ_ASSERT(!NS_IsMainThread());
+    ErrorResult rv;
+    WorkerGlobalScope* target = aWorkerPrivate->GlobalScope();
+    JS::Rooted<JSObject*> jsGlobal(aCx, target->GetWrapper());
+    GlobalObject globalObject(aCx, jsGlobal);
+
+    nsString asNSString = NS_ConvertUTF8toUTF16(mResourceURL);
+    RequestOrString info;
+    info.SetAsString().Rebind(asNSString.Data(), asNSString.Length());
+
+    RequestInit init;
+    nsRefPtr<mozilla::dom::Request> req =
+      mozilla::dom::Request::Constructor(globalObject, info, init, rv);
+    ENSURE_SUCCESS(rv, false);
+
+    FetchEventInit finit;
+    finit.mBubbles = false;
+    finit.mCancelable = true;
+    finit.mIsTopLevel = mIsTopLevel;
+    finit.mType = mIsNavigate ? RequestType::Navigate : RequestType::Fetch;
+    finit.mRequest = req;
+    nsRefPtr<FetchEvent> fetchEvent =
+      FetchEvent::Constructor(globalObject,
+                              NS_LITERAL_STRING("fetch"), finit, rv);
+    fetchEvent->SetTrusted(true);
+
+    rv = target->DispatchDOMEvent(nullptr, fetchEvent, nullptr, nullptr);
+    MOZ_ASSERT(!rv.Failed());
+
+    if (fetchEvent->DefaultPrevented()) {
+      nsRefPtr<Promise> p = fetchEvent->GetResponsePromise();
+      nsRefPtr<ResponseResolvedHandler> handler = new ResponseResolvedHandler(mChannel);
+      p->AppendNativeHandler(handler);
+      // Now we wait for a response.
+    } else {
+      fprintf(stderr, "NSM Fetch was not handled by ServiceWorker\n");
+      nsCOMPtr<nsIRunnable> normalFetch = new NormalFetchRunnable(mChannel);
+      NS_DispatchToMainThread(normalFetch);
+    }
+
+    return true;
+  }
+
+  ~FetchEventRunnable()
+  {
+  }
+};
+
+/*
+NS_IMETHODIMP
+ServiceWorkerManager::SendFetchEvent(nsIDocument* aOriginator,
+                                     nsIAlternateSourceChannel* aChannel)
+{
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(aOriginator);
+  MOZ_ASSERT(aChannel);
+
+  ServiceWorkerRegistration* registration;
+  if (!FindPossibleController(aOriginator, &registration)) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
+  MOZ_ASSERT(registration);
+  ServiceWorkerInfo* current = registration->mCurrentWorker;
+  if (!current) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
+  // FIXME(nsm): If activating, wait.
+
+  nsRefPtr<ServiceWorker> serviceWorker;
+  nsresult rv = CreateServiceWorkerForDocument(aOriginator,
+                                               current->mScriptSpec,
+                                               registration->mScope,
+                                               getter_AddRefs(serviceWorker));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return NS_ERROR_FAILURE;
+  }
+
+  MOZ_ASSERT(serviceWorker);
+
+  // FIXME(nsm): If the fetch is for the service worker, pass through.
+  nsMainThreadPtrHandle<nsIDocument> mainThreadDocument =
+    new nsMainThreadPtrHolder<nsIDocument>(aOriginator);
+
+  nsMainThreadPtrHandle<nsIAlternateSourceChannel> mainThreadChannel =
+    new nsMainThreadPtrHolder<nsIAlternateSourceChannel>(aChannel);
+
+  nsRefPtr<FetchEventRunnable> fetch =
+    new FetchEventRunnable(serviceWorker->GetWorkerPrivate(), mainThreadDocument,
+                           mainThreadChannel, false, false);
+
+  AutoSafeJSContext cx;
+  if (!fetch->Dispatch(cx)) {
+    return NS_ERROR_FAILURE;
+  }
+  return NS_OK;
+}*/
+
+NS_IMETHODIMP
+ServiceWorkerManager::SendNavigationEvent(nsIAlternateSourceChannel* aChannel)
+{
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(aChannel);
+
+  nsCOMPtr<nsIChannel> wrappedChannel;
+  nsresult rv = aChannel->GetWrappedChannel(getter_AddRefs(wrappedChannel));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+  }
+
+  nsCOMPtr<nsIURI> channelURI;
+  rv = wrappedChannel->GetOriginalURI(getter_AddRefs(channelURI));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+  }
+
+  nsRefPtr<ServiceWorkerRegistration> registration =
+    GetServiceWorkerRegistration(channelURI);
+  if (!registration) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
+  if (!registration->mCurrentWorker) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
+  // The 'associate registration with document' part happens when the document
+  // itself loads.
+  // FIXME(nsm): If activating, wait.
+
+  nsRefPtr<ServiceWorker> serviceWorker;
+  rv =  CreateServiceWorker(registration->mCurrentWorker->GetScriptSpec(),
+                                           registration->mScope,
+                                           getter_AddRefs(serviceWorker));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return NS_ERROR_FAILURE;
+  }
+
+  // FIXME(nsm): If the fetch is for the service worker, pass through.
+  nsMainThreadPtrHandle<nsIAlternateSourceChannel> mainThreadChannel =
+    new nsMainThreadPtrHolder<nsIAlternateSourceChannel>(aChannel);
+
+  nsRefPtr<FetchEventRunnable> fetch =
+    new FetchEventRunnable(serviceWorker->GetWorkerPrivate(), nullptr,
+                           mainThreadChannel, true, true);
+
+  AutoSafeJSContext cx;
+  if (!fetch->Dispatch(cx)) {
+    return NS_ERROR_FAILURE;
+  }
+  return NS_OK;
+}
+
+/*
+NS_IMETHODIMP
+ServiceWorkerManager::IsControlled(nsIDocument* aDoc, bool* aControlled)
+{
+  MOZ_ASSERT(NS_IsMainThread());
+
+  ServiceWorkerRegistration* registration;
+  *aControlled = FindPossibleController(aDoc, &registration);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+ServiceWorkerManager::IsControlledURI(nsIURI* aURI, bool* aControlled)
+{
+  MOZ_ASSERT(NS_IsMainThread());
+
+  ServiceWorkerRegistration* registration;
+  *aControlled = FindPossibleController(aURI, &registration);
+  return NS_OK;
+}
+*/
 END_WORKERS_NAMESPACE

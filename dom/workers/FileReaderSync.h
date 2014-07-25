@@ -7,7 +7,7 @@
 #ifndef mozilla_dom_workers_filereadersync_h__
 #define mozilla_dom_workers_filereadersync_h__
 
-#include "Workers.h"
+#include "mozilla/dom/workers/Workers.h"
 
 class nsIInputStream;
 class nsIDOMBlob;

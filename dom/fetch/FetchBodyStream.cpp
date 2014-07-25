@@ -10,6 +10,7 @@
 #include "nsPIDOMWindow.h"
 
 #include "mozilla/dom/Promise.h"
+#include "mozilla/dom/workers/bindings/FileReaderSync.h"
 
 using namespace mozilla::dom;
 
@@ -122,6 +123,28 @@ FetchBodyStream::AsText()
     return nullptr;
   }
 
-  promise->MaybeReject(NS_ERROR_NOT_AVAILABLE);
+  if (mBlob) {
+    AutoSafeJSContext cx;
+    JS::Rooted<JS::Value> val(cx);
+    result = nsContentUtils::WrapNative(cx, mBlob, &val);
+    MOZ_ASSERT(val.isObjectOrNull());
+    JS::Rooted<JSObject*> asObject(cx, val.toObjectOrNull());
+
+    // Only on worker for now, because i don't want to add the check.
+    MOZ_ASSERT(!NS_IsMainThread());
+    nsRefPtr<workers::FileReaderSync> reader = new workers::FileReaderSync();
+
+    nsString body;
+    Optional<nsAString> encoding;
+    reader->ReadAsText(asObject, encoding, body, result);
+    if (result.Failed()) {
+      promise->MaybeReject(result.ErrorCode());
+    } else {
+      promise->MaybeResolve(body);
+    }
+  } else {
+    // FIXME(nsm): Not ready to be async yet.
+    MOZ_CRASH();
+  }
   return promise.forget();
 }

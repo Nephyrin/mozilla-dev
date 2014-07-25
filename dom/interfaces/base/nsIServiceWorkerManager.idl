@@ -5,10 +5,11 @@
 
 #include "domstubs.idl"
 
+interface nsIAlternateSourceChannel;
 interface nsIDocument;
 interface nsIURI;
 
-[uuid(cc539f1e-1ce6-4af5-bf94-195b30bde010)]
+[uuid(9d3d11c8-0c0b-4c55-90b7-8e727ba33f9f)]
 interface nsIServiceWorkerManager : nsISupports
 {
   // Returns a Promise
@@ -41,6 +42,8 @@ interface nsIServiceWorkerManager : nsISupports
   [noscript] nsISupports GetWaiting(in nsIDOMWindow aWindow);
   [noscript] nsISupports GetActive(in nsIDOMWindow aWindow);
   [noscript] nsISupports GetDocumentController(in nsIDOMWindow aWindow);
+
+  void SendNavigationEvent(in nsIAlternateSourceChannel aChannel);
 
   // Testing
   DOMString getScopeForUrl(in DOMString path);

@@ -96,7 +96,9 @@ FetchEvent::RespondWith(Response& r)
   ErrorResult result;
   mResponsePromise = Promise::Create(global, result);
   MOZ_ASSERT(!result.Failed());
-  mResponsePromise->MaybeResolve(&r);
+
+  nsRefPtr<Response> copy = new Response(&r);
+  mResponsePromise->MaybeResolve(copy);
 }
 
 already_AddRefed<Promise>

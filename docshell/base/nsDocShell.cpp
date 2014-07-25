@@ -58,6 +58,7 @@
 #include "nsIScrollableFrame.h"
 #include "nsContentPolicyUtils.h" // NS_CheckContentLoadPolicy(...)
 #include "nsISeekableStream.h"
+#include "nsIServiceWorkerManager.h"
 #include "nsAutoPtr.h"
 #include "nsIWritablePropertyBag2.h"
 #include "nsIAppShell.h"
@@ -10098,11 +10099,7 @@ nsDocShell::DoURILoad(nsIURI * aURI,
         }
     }
 
-    //TODO(jdm): Check document for presence of navigation controller
-    if (false) {
-        channel = new AlternateSourceChannel(channel, nullptr);
-        //TODO(jdm): inform navigation controller about channel, probably via listener param
-    }
+    channel = InterceptNavigation(channel);
 
     rv = DoChannelLoad(channel, uriLoader, aBypassClassifier);
 
@@ -10118,6 +10115,49 @@ nsDocShell::DoURILoad(nsIURI * aURI,
     }
 
     return rv;
+}
+
+NS_IMETHODIMP
+nsDocShell::OnWrappedChannelReady(nsIAlternateSourceChannel* aChannel)
+{
+    nsCOMPtr<nsIServiceWorkerManager> manager =
+        do_GetService(SERVICEWORKERMANAGER_CONTRACTID);
+    if (manager) {
+        nsresult rv = manager->SendNavigationEvent(aChannel);
+        if (rv == NS_ERROR_NOT_AVAILABLE) {
+          aChannel->ForwardToOriginalChannel();
+          return NS_OK;
+        } else {
+          return rv;
+        }
+    }
+    return NS_OK;
+}
+
+already_AddRefed<nsIChannel>
+nsDocShell::InterceptNavigation(nsIChannel* aChannel)
+{
+    MOZ_ASSERT(aChannel);
+
+    nsCOMPtr<nsIChannel> result = aChannel;
+
+    // If shift+reloading, ignore.
+    if (LOAD_TYPE_HAS_FLAGS(mLoadType, LOAD_FLAGS_BYPASS_CACHE)) {
+        return result.forget();
+    }
+
+    nsCOMPtr<nsIServiceWorkerManager> manager =
+        do_GetService(SERVICEWORKERMANAGER_CONTRACTID);
+    if (manager) {
+        nsCOMPtr<nsIURI> channelURI;
+        nsresult rv = aChannel->GetOriginalURI(getter_AddRefs(channelURI));
+        if (NS_WARN_IF(NS_FAILED(rv))) {
+            return result.forget();
+        }
+
+        result = new AlternateSourceChannel(aChannel, static_cast<nsDocShell*>(this));
+    }
+    return result.forget();
 }
 
 static NS_METHOD

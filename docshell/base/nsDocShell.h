@@ -42,6 +42,7 @@
 #include "nsIWebShellServices.h"
 #include "nsILinkHandler.h"
 #include "nsIClipboardCommands.h"
+#include "nsINetUtil.h"
 #include "nsITabParent.h"
 #include "nsCRT.h"
 #include "prtime.h"
@@ -139,6 +140,7 @@ class nsDocShell : public nsDocLoader,
                    public nsILinkHandler,
                    public nsIClipboardCommands,
                    public nsIDOMStorageManager,
+                   public nsIAlternateSourceChannelListener,
                    public mozilla::SupportsWeakPtr<nsDocShell>
 {
     friend class nsDSURIContentListener;
@@ -169,6 +171,7 @@ public:
     NS_DECL_NSIAUTHPROMPTPROVIDER
     NS_DECL_NSICLIPBOARDCOMMANDS
     NS_DECL_NSIWEBSHELLSERVICES
+    NS_DECL_NSIALTERNATESOURCECHANNELLISTENER
     NS_FORWARD_SAFE_NSIDOMSTORAGEMANAGER(TopSessionStorageManager())
 
     NS_IMETHOD Stop() {
@@ -294,6 +297,9 @@ protected:
                                bool aForceAllowCookies,
                                const nsAString &aSrcdoc,
                                nsIURI * baseURI);
+
+    already_AddRefed<nsIChannel> InterceptNavigation(nsIChannel* aChannel);
+
     NS_IMETHOD AddHeadersToChannel(nsIInputStream * aHeadersData, 
                                   nsIChannel * aChannel);
     virtual nsresult DoChannelLoad(nsIChannel * aChannel,
