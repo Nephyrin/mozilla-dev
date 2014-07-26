@@ -9,7 +9,7 @@ interface nsIAlternateSourceChannel;
 interface nsIDocument;
 interface nsIURI;
 
-[uuid(9d3d11c8-0c0b-4c55-90b7-8e727ba33f9f)]
+[scriptable,uuid(3b254853-16ac-4387-bcb4-32caf945427c)]
 interface nsIServiceWorkerManager : nsISupports
 {
   // Returns a Promise
@@ -42,6 +42,8 @@ interface nsIServiceWorkerManager : nsISupports
   [noscript] nsISupports GetWaiting(in nsIDOMWindow aWindow);
   [noscript] nsISupports GetActive(in nsIDOMWindow aWindow);
   [noscript] nsISupports GetDocumentController(in nsIDOMWindow aWindow);
+
+  void SendEvent(in DOMString aName, in jsval aMessage, in nsIURI aPageURI);
 
   void SendNavigationEvent(in nsIAlternateSourceChannel aChannel);
   void SendFetchEvent(in nsIDOMWindow aOriginator, in nsIAlternateSourceChannel aChannel, in bool aIsTopLevel);

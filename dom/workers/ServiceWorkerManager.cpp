@@ -2183,6 +2183,79 @@ ServiceWorkerManager::SendFetchEvent(nsIDOMWindow* aOriginator,
   return NS_OK;
 }
 
+class ServiceWorkerEventRunnable MOZ_FINAL : public WorkerRunnable
+{
+public:
+  ServiceWorkerEventRunnable(WorkerPrivate* aWorkerPrivate, const nsAString& aName)
+    : WorkerRunnable(aWorkerPrivate, WorkerThreadModifyBusyCount),
+      mName(aName)
+  {
+    AssertIsOnMainThread();
+  }
+
+  bool
+  WorkerRun(JSContext* aCx, WorkerPrivate* aWorkerPrivate) MOZ_OVERRIDE
+  {
+    MOZ_ASSERT(aWorkerPrivate);
+    MOZ_ASSERT(aWorkerPrivate->IsServiceWorker());
+
+    nsRefPtr<WorkerGlobalScope> target = aWorkerPrivate->GlobalScope();
+
+    nsresult rv = target->DispatchTrustedEvent(mName);
+    MOZ_ASSERT(NS_SUCCEEDED(rv));
+    return true;
+  }
+
+private:
+  virtual
+  ~ServiceWorkerEventRunnable()
+  { }
+
+  const nsString mName;
+  JS::Heap<JS::Value> mDetail;
+
+};
+
+NS_IMETHODIMP
+ServiceWorkerManager::SendEvent(const nsAString& aName, JS::Handle<JS::Value> aMessage, nsIURI* aPageURI)
+{
+  MOZ_ASSERT(nsContentUtils::IsCallerChrome());
+  fprintf(stderr, "NSM Sending event! %s\n", NS_ConvertUTF16toUTF8(aName).get());
+
+  nsRefPtr<ServiceWorkerRegistration> registration =
+    GetServiceWorkerRegistration(aPageURI);
+
+  if (!registration) {
+    fprintf(stderr, "NSM No service worker registration found to SendEvent\n");
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
+  if (!registration->mCurrentWorker) {
+    fprintf(stderr, "NSM No current service worker found to SendEvent\n");
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
+  nsRefPtr<ServiceWorker> serviceWorker;
+  nsresult rv =
+    CreateServiceWorker(registration->mCurrentWorker->GetScriptSpec(),
+                        registration->mScope,
+                        getter_AddRefs(serviceWorker));
+
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return NS_ERROR_FAILURE;
+  }
+
+  // FIXME(nsm): aMessage
+  nsRefPtr<ServiceWorkerEventRunnable> r =
+    new ServiceWorkerEventRunnable(serviceWorker->GetWorkerPrivate(), aName);
+
+  AutoSafeJSContext cx;
+  if (!r->Dispatch(cx)) {
+    return NS_ERROR_FAILURE;
+  }
+  return NS_OK;
+}
+
 /*
 NS_IMETHODIMP
 ServiceWorkerManager::IsControlled(nsIDocument* aDoc, bool* aControlled)

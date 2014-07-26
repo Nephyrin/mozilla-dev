@@ -1193,22 +1193,16 @@ this.PushService = {
   },
 
   _notifyApp: function(aPushRecord) {
-    if (!aPushRecord || !aPushRecord.pageURL || !aPushRecord.manifestURL) {
+      debug(JSON.stringify(aPushRecord));
+    if (!aPushRecord || !aPushRecord.origin) {
       debug("notifyApp() something is undefined.  Dropping notification");
       return;
     }
 
-    debug("notifyApp() " + aPushRecord.pageURL +
-          "  " + aPushRecord.manifestURL);
-    let pageURI = Services.io.newURI(aPushRecord.pageURL, null, null);
-    let manifestURI = Services.io.newURI(aPushRecord.manifestURL, null, null);
-    let message = {
-      pushEndpoint: aPushRecord.pushEndpoint,
-      version: aPushRecord.version
-    };
-    let messenger = Cc["@mozilla.org/system-message-internal;1"]
-                      .getService(Ci.nsISystemMessagesInternal);
-    messenger.sendMessage('push', message, pageURI, manifestURI);
+    let pageURI = Services.io.newURI(aPushRecord.origin, null, null);
+    let swm = Cc["@mozilla.org/serviceworkers/manager;1"]
+                .getService(Ci.nsIServiceWorkerManager);
+    swm.SendEvent('push', aPushRecord.pushEndpoint, pageURI);
   },
 
   _updatePushRecord: function(aPushRecord) {
