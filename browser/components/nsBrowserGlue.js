@@ -199,7 +199,7 @@ BrowserGlue.prototype = {
   },
 #endif
 
-  // nsIObserver implementation 
+  // nsIObserver implementation
   observe: function BG_observe(subject, topic, data) {
     switch (topic) {
       case "prefservice:after-app-defaults":
@@ -386,7 +386,7 @@ BrowserGlue.prototype = {
     }
   },
 
-  // initialization (called on application startup) 
+  // initialization (called on application startup)
   _init: function BG__init() {
     let os = Services.obs;
     os.addObserver(this, "prefservice:after-app-defaults", false);
@@ -473,7 +473,7 @@ BrowserGlue.prototype = {
     this._sanitizer.onStartup();
     // check if we're in safe mode
     if (Services.appinfo.inSafeMode) {
-      Services.ww.openWindow(null, "chrome://browser/content/safeMode.xul", 
+      Services.ww.openWindow(null, "chrome://browser/content/safeMode.xul",
                              "_blank", "chrome,centerscreen,modal,resizable=no", null);
     }
 
@@ -1576,7 +1576,7 @@ BrowserGlue.prototype = {
     }
 
     if (currentUIVersion < 19) {
-      let detector = null;    
+      let detector = null;
       try {
         detector = Services.prefs.getComplexValue("intl.charset.detector",
                                                   Ci.nsIPrefLocalizedString).data;
@@ -1919,6 +1919,7 @@ ContentPermissionPrompt.prototype = {
    */
   _showPrompt: function CPP_showPrompt(aRequest, aMessage, aPermission, aActions,
                                        aNotificationId, aAnchorId, aOptions) {
+
     function onFullScreen() {
       popup.remove();
     }
@@ -2008,6 +2009,38 @@ ContentPermissionPrompt.prototype = {
       // remove the now-impotent notification.
       browser.addEventListener("mozfullscreenchange", onFullScreen, true);
     }
+  },
+
+  _promptPush : function(aRequest){
+    var browserBundle = Services.strings.createBundle("chrome://browser/locale/browser.properties");
+    var requestingURI = aRequest.principal.URI;
+
+    var message = browserBundle.formatStringFromName("push.enablePush",
+                                                 [requestingURI.path], 1);
+
+
+    var actions = [
+    {
+      stringId: "push.allowForSession",
+      action: Ci.nsIPermissionManager.ALLOW_ACTION,
+      expireType: Ci.nsIPermissionManager.EXPIRE_SESSION, 
+      callback: function() {}
+    },
+    {
+      stringId: "push.alwaysAllow",
+      action: Ci.nsIPermissionManager.ALLOW_ACTION,
+      expireType: null, 
+      callback: function() {}
+    },
+    {
+      stringId: "push.alwaysBlock",
+      action: Ci.nsIPermissionManager.DENY_ACTION,
+      expireType: null,
+      callback: function() {}
+    }]
+    this._showPrompt(aRequest, message, "push", actions, "push",
+                     null, null);
+
   },
 
   _promptGeo : function(aRequest) {
@@ -2137,7 +2170,6 @@ ContentPermissionPrompt.prototype = {
   },
 
   prompt: function CPP_prompt(request) {
-
     // Only allow exactly one permission rquest here.
     let types = request.types.QueryInterface(Ci.nsIArray);
     if (types.length != 1) {
@@ -2149,6 +2181,7 @@ ContentPermissionPrompt.prototype = {
     const kFeatureKeys = { "geolocation" : "geo",
                            "desktop-notification" : "desktop-notification",
                            "pointerLock" : "pointerLock",
+                           "push" : "push"
                          };
 
     // Make sure that we support the request.
@@ -2198,6 +2231,9 @@ ContentPermissionPrompt.prototype = {
       break;
     case "pointerLock":
       this._promptPointerLock(request, autoAllow);
+      break;
+    case "push":
+      this._promptPush(request);
       break;
     }
   },

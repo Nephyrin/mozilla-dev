@@ -12,13 +12,13 @@ const Cr = Components.results;
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 
-function PushServiceLauncher() {
+function SimplepushServiceLauncher() {
 };
 
-PushServiceLauncher.prototype = {
-  classID: Components.ID("{4b8caa3b-eeee-4f3c-a7f5-7bd9cb24c11d}"),
+SimplepushServiceLauncher.prototype = {
+  classID: Components.ID("{4b8caa3b-3c58-4f3c-a7f5-7bd9cb24c11d}"),
 
-  contractID: "@mozilla.org/push/ServiceLauncher;1",
+  contractID: "@mozilla.org/simplepush/ServiceLauncher;1",
 
   QueryInterface: XPCOMUtils.generateQI([Ci.nsIObserver,
                                          Ci.nsISupportsWeakReference]),
@@ -30,14 +30,14 @@ PushServiceLauncher.prototype = {
         break;
       case "final-ui-startup":
         Services.obs.removeObserver(this, "final-ui-startup");
-        if (!Services.prefs.getBoolPref("dom.push.enabled")) {
+        if (!Services.prefs.getBoolPref("services.push.enabled")) {
           return;
         }
-        Cu.import("resource://gre/modules/PushService.jsm");
-        PushService.init();
+        Cu.import("resource://gre/modules/SimplepushService.jsm");
+        SimplepushService.init();
         break;
     }
   }
 };
 
-this.NSGetFactory = XPCOMUtils.generateNSGetFactory([PushServiceLauncher]);
+this.NSGetFactory = XPCOMUtils.generateNSGetFactory([SimplepushServiceLauncher]);

@@ -6,10 +6,10 @@
 
 [NoInterfaceObject,
  NavigatorProperty="push",
- JSImplementation="@mozilla.org/push/PushManager;1",
- CheckPermissions="push",
+ JSImplementation="@mozilla.org/simplepush/SimplepushManager;1",
+ //CheckPermissions="push",
  Pref="services.push.enabled"]
-interface PushManager {
+interface SimplepushManager {
     DOMRequest register();
     DOMRequest unregister(DOMString pushEndpoint);
     DOMRequest registrations();

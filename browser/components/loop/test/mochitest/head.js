@@ -55,10 +55,12 @@ function promiseGetMozLoopAPI() {
 function loadLoopPanel() {
   // Set prefs to ensure we don't access the network externally.
   Services.prefs.setCharPref("services.push.serverURL", "ws://localhost/");
+  Services.prefs.setCharPref("dom.push.serverURL", "ws://localhost/");
   Services.prefs.setCharPref("loop.server", "http://localhost/");
 
   registerCleanupFunction(function() {
     Services.prefs.clearUserPref("services.push.serverURL");
+    Services.prefs.clearUserPref("dom.push.serverURL");
     Services.prefs.clearUserPref("loop.server");
   });
 

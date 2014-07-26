@@ -5,12 +5,12 @@
 
 "use strict";
 
-// Don't modify this, instead set dom.push.debug.
+// Don't modify this, instead set services.push.debug.
 let gDebuggingEnabled = false;
 
 function debug(s) {
   if (gDebuggingEnabled)
-    dump("-*- PushService.jsm: " + s + "\n");
+    dump("-*- SimplepushService.jsm: " + s + "\n");
 }
 
 const Cc = Components.classes;
@@ -35,22 +35,22 @@ XPCOMUtils.defineLazyModuleGetter(this, "AlarmService",
 
 var threadManager = Cc["@mozilla.org/thread-manager;1"].getService(Ci.nsIThreadManager);
 
-this.EXPORTED_SYMBOLS = ["PushService"];
+this.EXPORTED_SYMBOLS = ["SimplepushService"];
 
-const prefs = new Preferences("dom.push.");
+const prefs = new Preferences("services.push.");
 // Set debug first so that all debugging actually works.
 gDebuggingEnabled = prefs.get("debug");
 
-const kPUSHDB_DB_NAME = "push";
-const kPUSHDB_DB_VERSION = 2; // Change this if the IndexedDB format changes
-const kPUSHDB_STORE_NAME = "push";
+const kPUSHDB_DB_NAME = "simplepush";
+const kPUSHDB_DB_VERSION = 1; // Change this if the IndexedDB format changes
+const kPUSHDB_STORE_NAME = "simplepush";
 
 const kUDP_WAKEUP_WS_STATUS_CODE = 4774;  // WebSocket Close status code sent
                                           // by server to signal that it can
                                           // wake client up using UDP.
 
-const kCHILD_PROCESS_MESSAGES = ["Push:Register", "Push:Unregister",
-                                 "Push:IsRegistered"];
+const kCHILD_PROCESS_MESSAGES = ["Simplepush:Register", "Simplepush:Unregister",
+                                 "Simplepush:Registrations"];
 
 // This is a singleton
 this.PushDB = function PushDB() {
@@ -70,9 +70,13 @@ this.PushDB.prototype = {
     let objectStore = aDb.createObjectStore(kPUSHDB_STORE_NAME,
                                             { keyPath: "channelID" });
 
-    // The URL will either be a manifest URL or a page URL depending
-    // on who is using push.  Only one endpoint per app/page.
-    objectStore.createIndex("origin", "origin", { unique: true });
+    // index to fetch records based on endpoints. used by unregister
+    objectStore.createIndex("pushEndpoint", "pushEndpoint", { unique: true });
+
+    // index to fetch records per manifest, so we can identify endpoints
+    // associated with an app. Since an app can have multiple endpoints
+    // uniqueness cannot be enforced
+    objectStore.createIndex("manifestURL", "manifestURL", { unique: false });
   },
 
   /*
@@ -124,6 +128,26 @@ this.PushDB.prototype = {
     );
   },
 
+  getByPushEndpoint: function(aPushEndpoint, aSuccessCb, aErrorCb) {
+    debug("getByPushEndpoint()");
+
+    this.newTxn(
+      "readonly",
+      kPUSHDB_STORE_NAME,
+      function txnCb(aTxn, aStore) {
+        aTxn.result = undefined;
+
+        let index = aStore.index("pushEndpoint");
+        index.get(aPushEndpoint).onsuccess = function setTxnResult(aEvent) {
+          aTxn.result = aEvent.target.result;
+          debug("Fetch successful " + aEvent.target.result);
+        }
+      },
+      aSuccessCb,
+      aErrorCb
+    );
+  },
+
   getByChannelID: function(aChannelID, aSuccessCb, aErrorCb) {
     debug("getByChannelID()");
 
@@ -143,18 +167,30 @@ this.PushDB.prototype = {
     );
   },
 
-  getByOrigin: function(origin, aSuccessCb, aErrorCb) {
-    debug("getByOrigin()");
+  getAllByManifestURL: function(aManifestURL, aSuccessCb, aErrorCb) {
+    debug("getAllByManifestURL()");
+    if (!aManifestURL) {
+      if (typeof aErrorCb == "function") {
+        aErrorCb("PushDB.getAllByManifestURL: Got undefined aManifestURL");
+      }
+      return;
+    }
+
+    let self = this;
     this.newTxn(
       "readonly",
       kPUSHDB_STORE_NAME,
       function txnCb(aTxn, aStore) {
-        aTxn.result = undefined;
-
-        let index = aStore.index("origin");
-        index.get(origin).onsuccess = function setTxnResult(aEvent) {
-          aTxn.result = aEvent.target.result;
-          debug("Fetch successful " + aEvent.target.result);
+        let index = aStore.index("manifestURL");
+        let range = IDBKeyRange.only(aManifestURL);
+        aTxn.result = [];
+        index.openCursor(range).onsuccess = function(event) {
+          let cursor = event.target.result;
+          if (cursor) {
+            debug(cursor.value.manifestURL + " " + cursor.value.channelID);
+            aTxn.result.push(cursor.value);
+            cursor.continue();
+          }
         }
       },
       aSuccessCb,
@@ -254,7 +290,7 @@ const STATE_READY = 3;
  * process and is started on boot. It uses WebSockets to communicate with the
  * server and PushDB (IndexedDB) for persistence.
  */
-this.PushService = {
+this.SimplepushService = {
   observe: function observe(aSubject, aTopic, aData) {
     switch (aTopic) {
       /*
@@ -283,17 +319,17 @@ this.PushService = {
         }
         break;
       case "nsPref:changed":
-        if (aData == "dom.push.serverURL") {
-          debug("dom.push.serverURL changed! websocket. new value " +
+        if (aData == "services.push.serverURL") {
+          debug("services.push.serverURL changed! websocket. new value " +
                 prefs.get("serverURL"));
           this._shutdownWS();
-        } else if (aData == "dom.push.connection.enabled") {
+        } else if (aData == "services.push.connection.enabled") {
           if (prefs.get("connection.enabled")) {
             this._startListeningIfChannelsPresent();
           } else {
             this._shutdownWS();
           }
-        } else if (aData == "dom.push.debug") {
+        } else if (aData == "services.push.debug") {
           gDebuggingEnabled = prefs.get("debug");
         }
         break;
@@ -353,21 +389,22 @@ this.PushService = {
           return;
         }
 
-        this._db.getByOrigin(manifestURL, function(record) {
-
-          this._db.delete(record.channelID, null, function() {
-            debug("webapps-clear-data: " + manifestURL +
-                  " Could not delete entry " + record.channelID);
-          });
-          // courtesy, but don't establish a connection
-          // just for it
-          if (this._ws) {
-            debug("Had a connection, so telling the server");
-            this._send("unregister", {channelID: record.channelID});
+        this._db.getAllByManifestURL(manifestURL, function(records) {
+          debug("Got " + records.length);
+          for (let i = 0; i < records.length; i++) {
+            this._db.delete(records[i].channelID, null, function() {
+              debug("webapps-clear-data: " + manifestURL +
+                    " Could not delete entry " + records[i].channelID);
+            });
+            // courtesy, but don't establish a connection
+            // just for it
+            if (this._ws) {
+              debug("Had a connection, so telling the server");
+              this._send("unregister", {channelID: records[i].channelID});
+            }
           }
-
         }.bind(this), function() {
-          debug("webapps-clear-data: Error in getByOrigin(" + manifestURL + ")");
+          debug("webapps-clear-data: Error in getAllByManifestURL(" + manifestURL + ")");
         });
 
         break;
@@ -422,7 +459,7 @@ this.PushService = {
    *   1) the gap between the maximum working ping and the first ping that
    *      gives an error (timeout) OR
    *   2) we have reached the pref of the maximum value we allow for a ping
-   *      (dom.push.adaptive.upperLimit)
+   *      (services.push.adaptive.upperLimit)
    */
   _recalculatePing: true,
 
@@ -1234,7 +1271,7 @@ this.PushService = {
 
     let mm = aMessage.target.QueryInterface(Ci.nsIMessageSender);
     let json = aMessage.data;
-    this[aMessage.name.slice("Push:".length).toLowerCase()](json, mm);
+    this[aMessage.name.slice("Simplepush:".length).toLowerCase()](json, mm);
   },
 
   /**
@@ -1243,49 +1280,24 @@ this.PushService = {
    */
   register: function(aPageRecord, aMessageManager) {
     debug("register()");
-    this._getRegistration(aPageRecord)
+
+    let uuidGenerator = Cc["@mozilla.org/uuid-generator;1"]
+                          .getService(Ci.nsIUUIDGenerator);
+    // generateUUID() gives a UUID surrounded by {...}, slice them off.
+    let channelID = uuidGenerator.generateUUID().toString().slice(1, -1);
+
+    this._sendRequest("register", {channelID: channelID})
       .then(
-        (registration) => {
-          if(registration !== undefined){
-            aMessageManager.sendAsyncMessage("PushService:Register:OK",
-              {
-                resolverID: aPageRecord.resolverID,
-                pushEndpoint: registration.pushEndpoint
-              });
-          }
-          else{
-            let uuidGenerator = Cc["@mozilla.org/uuid-generator;1"]
-                      .getService(Ci.nsIUUIDGenerator);
-
-            // generateUUID() gives a UUID surrounded by {...}, slice them off.
-            let channelID = uuidGenerator.generateUUID().toString().slice(1, -1);
-
-            this._sendRequest("register", {channelID: channelID})
-              .then(
-                this._onRegisterSuccess.bind(this, aPageRecord, channelID),
-                this._onRegisterError.bind(this, aMessageManager, channelID)
-              )
-              .then(
-                function(message) {
-                  aMessageManager.sendAsyncMessage("PushService:Register:OK", message);
-                },
-                function(message) {
-                  aMessageManager.sendAsyncMessage("PushService:Register:KO", message);
-                }
-              );
-          }
-        },
-        function(error){
-          debug('_getRegistration failed')
-          debug(error);
-          aMessageManager.sendAsyncMessage("PushService:Register:KO",
-          {
-            resolverID: aPageRecord.resolverID,
-            error:error
-          });
-
-        }
+        this._onRegisterSuccess.bind(this, aPageRecord, channelID),
+        this._onRegisterError.bind(this, aPageRecord, aMessageManager)
       )
+      .then(
+        function(message) {
+          aMessageManager.sendAsyncMessage("SimplepushService:Register:OK", message);
+        },
+        function(message) {
+          aMessageManager.sendAsyncMessage("SimplepushService:Register:KO", message);
+      });
   },
 
   /**
@@ -1295,9 +1307,7 @@ this.PushService = {
   _onRegisterSuccess: function(aPageRecord, generatedChannelID, data) {
     debug("_onRegisterSuccess()");
     let deferred = Promise.defer();
-    let message = {
-      resolverID: aPageRecord.resolverID
-     };
+    let message = { requestID: aPageRecord.requestID };
 
     if (typeof data.channelID !== "string") {
       debug("Invalid channelID " + message);
@@ -1320,25 +1330,22 @@ this.PushService = {
       throw message;
     }
 
-    let origin = aPageRecord.pageURL || aPageRecord.manifestURL;
-
     let record = {
       channelID: data.channelID,
       pushEndpoint: data.pushEndpoint,
-      origin: origin,
+      pageURL: aPageRecord.pageURL,
+      manifestURL: aPageRecord.manifestURL,
       version: null
     };
 
     this._updatePushRecord(record)
       .then(
-        () => {
-          debug('_updatePushRecord success')
+        function() {
           message["pushEndpoint"] = data.pushEndpoint;
           deferred.resolve(message);
         },
-        (error) => {
+        function(error) {
           // Unable to save.
-          debug('_updatePushRecord failed')
           this._send("unregister", {channelID: record.channelID});
           message["error"] = error;
           deferred.reject(message);
@@ -1357,32 +1364,9 @@ this.PushService = {
     if (!reply.error) {
       debug("Called without valid error message!");
     }
-    throw {resolverID: aPageRecord.resolverID, error: reply.error };
+    throw { requestID: aPageRecord.requestID, error: reply.error };
   },
 
-  /**
-   * Called on message from child process.  Must be lower case since
-   * receiveMessage translates the message into a lower case function name.
-   */
-  isregistered: function(aPageRecord, aMessageManager){
-    this._getRegistration(aPageRecord)
-      .then(
-        (registration) => {
-          aMessageManager.sendAsyncMessage("PushService:IsRegistered:OK",
-            {
-              resolverID: aPageRecord.resolverID,
-              isRegistered: (registration !== undefined)
-            });
-        },
-        function(error){
-          aMessageManager.sendAsyncMessage("PushService:IsRegistered:KO",
-          {
-            resolverID: aPageRecord.resolverID,
-            error:error
-          });
-        }
-      )
-  },
   /**
    * Called on message from the child process.
    *
@@ -1412,53 +1396,76 @@ this.PushService = {
 
     let fail = function(error) {
       debug("unregister() fail() error " + error);
-      let message = {resolverID: aPageRecord.resolverID, error: error};
-      aMessageManager.sendAsyncMessage("PushService:Unregister:KO", message);
+      let message = {requestID: aPageRecord.requestID, error: error};
+      aMessageManager.sendAsyncMessage("SimplepushService:Unregister:KO", message);
     }
 
-    this._getRegistration(aPageRecord)
-      .then(
-        (registration) => {
-          if(registration !== undefined){
-            this._db.delete(registration.channelID, () => {
-              // Let's be nice to the server and try to inform it, but we don't care
-              // about the reply.
-              this._send("unregister", {channelID: registration.channelID});
-              aMessageManager.sendAsyncMessage("PushService:Unregister:OK", {
-                resolverID: aPageRecord.resolverID
-              });
-            });
-          }
-          else{
-              aMessageManager.sendAsyncMessage("PushService:Unregister:OK", {
-                resolverID: aPageRecord.resolverID
-              });
-          }
-        },
-        function(error){
-          aMessageManager.sendAsyncMessage("PushService:Unregister:KO", {
-            resolverID: aPageRecord.resolverID,
-            error:      error
-          });
-        }
-      );
-
-  },
-
-  _getRegistration: function(aPageRecord) {
-    debug("_getRegistration()");
-    let promise = new Promise((resolve, reject) => {
-      let origin = aPageRecord.manifestURL || aPageRecord.pageURL;
-      if (origin) {
-        this._db.getByOrigin(origin,
-          function(record){ resolve(record); },
-          function(error) { reject(error); }
-        );
+    this._db.getByPushEndpoint(aPageRecord.pushEndpoint, function(record) {
+      // If the endpoint didn't exist, let's just fail.
+      if (record === undefined) {
+        fail("NotFoundError");
+        return;
       }
 
-    });
+      // Non-owner tried to unregister, say success, but don't do anything.
+      if (record.manifestURL !== aPageRecord.manifestURL) {
+        aMessageManager.sendAsyncMessage("SimplepushService:Unregister:OK", {
+          requestID: aPageRecord.requestID,
+          pushEndpoint: aPageRecord.pushEndpoint
+        });
+        return;
+      }
 
-    return promise;
+      this._db.delete(record.channelID, function() {
+        // Let's be nice to the server and try to inform it, but we don't care
+        // about the reply.
+        this._send("unregister", {channelID: record.channelID});
+        aMessageManager.sendAsyncMessage("SimplepushService:Unregister:OK", {
+          requestID: aPageRecord.requestID,
+          pushEndpoint: aPageRecord.pushEndpoint
+        });
+      }.bind(this), fail);
+    }.bind(this), fail);
+  },
+
+  /**
+   * Called on message from the child process
+   */
+  registrations: function(aPageRecord, aMessageManager) {
+    debug("registrations()");
+
+    if (aPageRecord.manifestURL) {
+      this._db.getAllByManifestURL(aPageRecord.manifestURL,
+        this._onRegistrationsSuccess.bind(this, aPageRecord, aMessageManager),
+        this._onRegistrationsError.bind(this, aPageRecord, aMessageManager));
+    }
+    else {
+      this._onRegistrationsError(aPageRecord, aMessageManager);
+    }
+  },
+
+  _onRegistrationsSuccess: function(aPageRecord,
+                                    aMessageManager,
+                                    pushRecords) {
+    let registrations = [];
+    pushRecords.forEach(function(pushRecord) {
+      registrations.push({
+          __exposedProps__: { pushEndpoint: 'r', version: 'r' },
+          pushEndpoint: pushRecord.pushEndpoint,
+          version: pushRecord.version
+      });
+    });
+    aMessageManager.sendAsyncMessage("SimplepushService:Registrations:OK", {
+      requestID: aPageRecord.requestID,
+      registrations: registrations
+    });
+  },
+
+  _onRegistrationsError: function(aPageRecord, aMessageManager) {
+    aMessageManager.sendAsyncMessage("SimplepushService:Registrations:KO", {
+      requestID: aPageRecord.requestID,
+      error: "Database error"
+    });
   },
 
   // begin Push protocol handshake

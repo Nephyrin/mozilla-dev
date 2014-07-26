@@ -29,6 +29,7 @@ function setupFakeLoopServer() {
   loopServer.start(-1);
 
   Services.prefs.setCharPref("services.push.serverURL", kServerPushUrl);
+  Services.prefs.setCharPref("dom.push.serverURL", kServerPushUrl);
 
   Services.prefs.setCharPref("loop.server",
     "http://localhost:" + loopServer.identity.primaryPort);

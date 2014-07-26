@@ -4001,8 +4001,63 @@ pref("dom.global-constructor.disable.mozContact", true);
 // WebAlarms
 pref("dom.mozAlarms.enabled", false);
 
-// SimplePush
+// SimplePush and Push 2
 pref("services.push.enabled", false);
+pref("dom.push.enabled", false);
+// Debugging enabled.
+pref("services.push.debug", false);
+pref("dom.push.debug", false);
+// Is the network connection allowed to be up?
+// This preference should be used in UX to enable/disable push.
+pref("services.push.connection.enabled", true);
+pref("dom.push.connection.enabled", true);
+// This preference allows the user to enable or disable the SimplePush
+// network connection. When set to false, the network connection is not
+// established, saving battery life and disabling push notifications.
+// registrations() and unregister() is still allowed.
+// This preference should be used in UX to enable/disable push.
+pref("services.push.userEnabled", true);
+pref("dom.push.userEnabled", true);
+// The PushServer to use. This MUST be a secure WebSockets URL.
+pref("services.push.serverURL", "wss://push.services.mozilla.com");
+pref("dom.push.serverURL", "wss://push.services.mozilla.com/");
+// A unique identifier assigned by the server to each device.
+pref("services.push.userAgentID", "");
+pref("dom.push.userAgentID", "");
+// Exponential back-off start is 5 seconds like in HTTP/1.1.
+// Maximum back-off is pingInterval.
+pref("services.push.retryBaseInterval", 5000);
+pref("dom.push.retryBaseInterval", 5000);
+// Interval at which to ping PushServer to check connection status. In
+// milliseconds. If no reply is received within requestTimeout, the connection
+// is considered closed.
+pref("services.push.pingInterval", 1800000); // 30 minutes
+pref("dom.push.pingInterval", 1800000); // 30 minutes
+// How long before a DOMRequest errors as timeout
+pref("services.push.requestTimeout", 10000);
+pref("dom.push.requestTimeout", 10000);
+// Enable udp wakeup support
+pref("services.push.udp.wakeupEnabled", false);
+pref("dom.push.udp.wakeupEnabled", false);
+// Port on which UDP server socket is bound
+pref("services.push.udp.port", 2442);
+pref("dom.push.udp.port", 2442);
+// serverURL to be assigned by services team
+pref("services.push.serverURL", "wss://push.services.mozilla.com/");
+pref("services.push.userAgentID", "");
+pref("dom.push.serverURL", "wss://push.services.mozilla.com/");
+pref("dom.push.userAgentID", "");
+// Exponential back-off start is 5 seconds like in HTTP/1.1.
+// Maximum back-off is pingInterval.
+pref("services.push.retryBaseInterval", 5000);
+pref("dom.push.retryBaseInterval", 5000);
+// Interval at which to ping PushServer to check connection status. In
+// milliseconds. If no reply is received within requestTimeout, the connection
+// is considered closed.
+pref("services.push.pingInterval", 1800000); // 30 minutes
+pref("dom.push.pingInterval", 1800000); // 30 minutes
+// How long before a DOMRequest errors as timeout
+pref("services.push.requestTimeout", 10000);
 
 // WebNetworkStats
 pref("dom.mozNetworkStats.enabled", false);

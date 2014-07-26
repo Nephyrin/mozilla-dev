@@ -1,0 +1,8 @@
+# DOM API
+component {cde1d019-fad8-4044-b141-65fb4fb7a245} Simplepush.js
+contract @mozilla.org/simplepush/SimplepushManager;1 {cde1d019-fad8-4044-b141-65fb4fb7a245}
+
+# Component to initialize SimplepushService on startup.
+component {4b8caa3b-3c58-4f3c-a7f5-7bd9cb24c11d} SimplepushServiceLauncher.js
+contract @mozilla.org/simplepush/ServiceLauncher;1 {4b8caa3b-3c58-4f3c-a7f5-7bd9cb24c11d}
+category app-startup SimplepushServiceLauncher @mozilla.org/simplepush/ServiceLauncher;1

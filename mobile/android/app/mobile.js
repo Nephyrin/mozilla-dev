@@ -653,6 +653,8 @@ pref("browser.dom.window.dump.enabled", true);
 
 // SimplePush
 pref("services.push.enabled", false);
+// Push 2
+pref("dom.push.enabled", false);
 
 // controls if we want camera support
 pref("device.camera.enabled", true);

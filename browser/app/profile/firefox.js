@@ -1571,10 +1571,16 @@ pref("loop.ringtone", "chrome://browser/content/loop/shared/sounds/Firefox-Long.
 pref("loop.retry_delay.start", 60000);
 pref("loop.retry_delay.limit", 300000);
 
-// serverURL to be assigned by services team
-pref("services.push.serverURL", "wss://push.services.mozilla.com/");
-
 pref("social.sidebar.unload_timeout_ms", 10000);
+
+// SimplePush and Push 2 (webpush)
+#ifdef RELEASE_BUILD
+pref("services.push.enabled", false);
+pref("dom.push.enabled", false);
+#else
+pref("services.push.enabled", true);
+pref("dom.push.enabled", true);
+#endif
 
 pref("dom.identity.enabled", false);
 

@@ -60,6 +60,7 @@ PARALLEL_DIRS += [
     'messages',
     'power',
     'push',
+    'simplepush',
     'quota',
     'settings',
     'mobilemessage',
