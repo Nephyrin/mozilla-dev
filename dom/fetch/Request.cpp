@@ -12,6 +12,7 @@
 #include "nsPIDOMWindow.h"
 
 #include "mozilla/dom/FetchBodyStream.h"
+#include "mozilla/dom/Headers.h"
 #include "mozilla/dom/URL.h"
 #include "mozilla/dom/workers/bindings/URL.h"
 

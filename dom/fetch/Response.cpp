@@ -11,6 +11,8 @@
 #include "nsISupportsImpl.h"
 #include "nsIDOMFile.h"
 
+#include "mozilla/dom/Headers.h"
+
 using namespace mozilla::dom;
 
 NS_IMPL_CYCLE_COLLECTING_ADDREF(Response)
@@ -29,7 +31,7 @@ Response::Response(nsISupports* aOwner)
 }
 
 Response::Response(const Response& aOther)
-  : Response(aOther.mOwner)
+  : mOwner(aOther.mOwner)
 {
   mType = aOther.mType;
   mUrl = aOther.mUrl;
@@ -67,7 +69,7 @@ Response::Body() const
 /*static*/ already_AddRefed<Response>
 Response::Constructor(const GlobalObject& global,
                       const Optional<ArrayBufferOrArrayBufferViewOrBlobOrString>& aBody,
-                      const ResponseInit& aInit, ErrorResult& rv)
+                      const ResponseInit& aInit, mozilla::ErrorResult& rv)
 {
   nsRefPtr<Response> response = new Response(global.GetAsSupports());
   response->mStatus = aInit.mStatus;

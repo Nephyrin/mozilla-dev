@@ -13,6 +13,27 @@
 namespace mozilla {
 namespace dom {
 
+InternalRequest::InternalRequest(nsIDocument* aClient)
+  : mMethod("GET")
+  //, mUnsafeRequest(false)
+  , mPreserveContentCodings(false)
+  , mClient(aClient)
+  , mSkipServiceWorker(false)
+  //, mContextFrameType(NONE)
+  //, mForceOriginHeader(false)
+  //, mSameOriginDataURL(false)
+  , mReferrerType(REFERRER_CLIENT)
+  //, mAuthenticationFlag(false)
+  , mSynchronous(false)
+  , mMode(RequestMode::No_cors)
+  , mCredentialsMode(RequestCredentials::Omit)
+  //, mUseURLCredentials(false)
+  //, mManualRedirect(false)
+  //, mRedirectCount(0)
+  //, mResponseTainting(RESPONSETAINT_BASIC)
+{
+}
+
 already_AddRefed<InternalRequest>
 InternalRequest::GetRestrictedCopy(nsIDocument* aGlobal)
 {
@@ -41,6 +62,13 @@ InternalRequest::GetRestrictedCopy(nsIDocument* aGlobal)
 
 InternalRequest::~InternalRequest()
 {
+}
+
+void
+InternalRequest::SetReferrer(nsIDocument* aClient)
+{
+  mReferrerType = REFERRER_CLIENT;
+  mReferrerClient = aClient;
 }
 
 } // namespace dom

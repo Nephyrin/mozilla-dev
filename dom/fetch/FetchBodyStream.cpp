@@ -31,12 +31,16 @@ FetchBodyStream::FetchBodyStream(nsISupports* aOwner)
   SetIsDOMBinding();
 }
 
+FetchBodyStream::FetchBodyStream(const FetchBodyStream& aOther)
+{
+}
+
 FetchBodyStream::~FetchBodyStream()
 {
 }
 
 /* static */ already_AddRefed<FetchBodyStream>
-FetchBodyStream::Constructor(const GlobalObject& aGlobal, ErrorResult& aRv)
+FetchBodyStream::Constructor(const GlobalObject& aGlobal, mozilla::ErrorResult& aRv)
 {
   nsRefPtr<FetchBodyStream> stream = new FetchBodyStream(aGlobal.GetAsSupports());
   return stream.forget();
@@ -157,3 +161,10 @@ FetchBodyStream::AsText()
   }
   return promise.forget();
 }
+
+void
+FetchBodyStream::SetBlob(nsIDOMBlob* aBlob)
+{
+  mBlob = aBlob;
+}
+

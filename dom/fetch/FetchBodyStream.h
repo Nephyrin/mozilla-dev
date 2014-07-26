@@ -6,6 +6,7 @@
 #ifndef mozilla_dom_FetchBodyStream_h
 #define mozilla_dom_FetchBodyStream_h
 
+#include "mozilla/ErrorResult.h"
 #include "mozilla/dom/FetchBinding.h"
 
 #include "nsISupportsImpl.h"
@@ -27,9 +28,7 @@ class FetchBodyStream : public nsISupports
 
 public:
   FetchBodyStream(nsISupports* aOwner);
-  FetchBodyStream(const FetchBodyStream& aOther)
-  {
-  }
+  FetchBodyStream(const FetchBodyStream& aOther);
 
   already_AddRefed<Promise>
   AsArrayBuffer();
@@ -61,10 +60,7 @@ public:
   }
 
   void
-  SetBlob(nsIDOMBlob* aBlob)
-  {
-    mBlob = aBlob;
-  }
+  SetBlob(nsIDOMBlob* aBlob);
 
 private:
   virtual ~FetchBodyStream();

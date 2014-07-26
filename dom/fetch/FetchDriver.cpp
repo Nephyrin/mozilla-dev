@@ -294,7 +294,7 @@ FetchDriver::OnStartRequest(nsIRequest* aRequest,
   return NS_OK;
 }
 
-/* static */ NS_IMETHODIMP
+/* static */ NS_METHOD
 FetchDriver::StreamReaderFunc(nsIInputStream* aInputStream,
                               void* aClosure,
                               const char* aFragment,

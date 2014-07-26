@@ -2201,8 +2201,7 @@ public:
 
     nsRefPtr<WorkerGlobalScope> target = aWorkerPrivate->GlobalScope();
 
-    nsresult rv = target->DispatchTrustedEvent(mName);
-    MOZ_ASSERT(NS_SUCCEEDED(rv));
+    target->DispatchTrustedEvent(mName);
     return true;
   }
 

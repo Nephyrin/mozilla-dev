@@ -56,13 +56,13 @@ private:
   NS_IMETHOD BasicFetch();
   NS_IMETHOD HttpFetch();
   NS_IMETHOD ContinueHttpFetchAfterServiceWorker();
-  NS_IMETHODIMP ContinueHttpFetchAfterCORSPreflight();
-  NS_IMETHODIMP HttpNetworkFetch();
-  NS_IMETHODIMP ContinueHttpFetchAfterNetworkFetch();
-  NS_IMETHODIMP FailWithNetworkError();
-  NS_IMETHODIMP SucceedWithResponse();
+  NS_IMETHOD ContinueHttpFetchAfterCORSPreflight();
+  NS_IMETHOD HttpNetworkFetch();
+  NS_IMETHOD ContinueHttpFetchAfterNetworkFetch();
+  NS_IMETHOD FailWithNetworkError();
+  NS_IMETHOD SucceedWithResponse();
 
-  static nsresult
+  static NS_METHOD
   StreamReaderFunc(nsIInputStream* aInputStream,
                               void* aClosure,
                               const char* aFragment,

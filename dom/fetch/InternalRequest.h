@@ -36,26 +36,7 @@ public:
     NONE,
   };
 
-  explicit InternalRequest(nsIDocument* aClient)
-    : mMethod("GET")
-    //, mUnsafeRequest(false)
-    , mPreserveContentCodings(false)
-    , mClient(aClient)
-    , mSkipServiceWorker(false)
-    //, mContextFrameType(NONE)
-    //, mForceOriginHeader(false)
-    //, mSameOriginDataURL(false)
-    , mReferrerType(REFERRER_CLIENT)
-    //, mAuthenticationFlag(false)
-    , mSynchronous(false)
-    , mMode(RequestMode::No_cors)
-    , mCredentialsMode(RequestCredentials::Omit)
-    //, mUseURLCredentials(false)
-    //, mManualRedirect(false)
-    //, mRedirectCount(0)
-    //, mResponseTainting(RESPONSETAINT_BASIC)
-  {
-  }
+  explicit InternalRequest(nsIDocument* aClient);
 
   // FIXME(nsm): Copy constructor.
 
@@ -106,11 +87,7 @@ public:
   }
 
   void
-  SetReferrer(nsIDocument* aClient)
-  {
-    mReferrerType = REFERRER_CLIENT;
-    mReferrerClient = aClient;
-  }
+  SetReferrer(nsIDocument* aClient);
 
   bool
   IsSynchronous()

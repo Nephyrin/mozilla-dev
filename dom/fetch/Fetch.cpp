@@ -59,7 +59,7 @@ ResolveFetchWithResponse::ResolveFetchWithResponse(Promise* aPromise)
 void
 ResolveFetchWithResponse::OnResponseAvailable(InternalResponse* aResponse)
 {
-  NS_ASSERT_OWNINGTHREAD(ResolveFetchWithResponse)
+  NS_ASSERT_OWNINGTHREAD(ResolveFetchWithResponse);
   mozilla::dom::workers::AssertIsOnMainThread();
   mInternalResponse = aResponse;
 
@@ -86,7 +86,7 @@ ResolveFetchWithResponse::OnResponseAvailable(InternalResponse* aResponse)
 void
 ResolveFetchWithResponse::OnResponseEnd()
 {
-  NS_ASSERT_OWNINGTHREAD(ResolveFetchWithResponse)
+  NS_ASSERT_OWNINGTHREAD(ResolveFetchWithResponse);
   mozilla::dom::workers::AssertIsOnMainThread();
   nsCOMPtr<nsIDOMBlob> blobBody = mInternalResponse->GetBody();
   if (blobBody) {
@@ -97,7 +97,7 @@ ResolveFetchWithResponse::OnResponseEnd()
 
 ResolveFetchWithResponse::~ResolveFetchWithResponse()
 {
-  NS_ASSERT_OWNINGTHREAD(ResolveFetchWithResponse)
+  NS_ASSERT_OWNINGTHREAD(ResolveFetchWithResponse);
 }
 
 } // namespace dom
