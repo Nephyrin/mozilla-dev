@@ -2004,6 +2004,7 @@ public:
 
     nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(wrappedChannel);
     MOZ_ASSERT(httpChannel);
+    mRequestInit.mMethod.Construct();
     httpChannel->GetRequestMethod(mRequestInit.mMethod.Value());
 
     nsCOMPtr<nsIUploadChannel> uploadChannel = do_QueryInterface(httpChannel);
@@ -2161,7 +2162,7 @@ ServiceWorkerManager::SendFetchEvent(nsIDOMWindow* aOriginator,
   nsresult rv = GetDocumentController(aOriginator,
                                       getter_AddRefs(serviceWorkerISupports));
   if (NS_WARN_IF(NS_FAILED(rv))) {
-    return NS_ERROR_FAILURE;
+    return NS_ERROR_NOT_AVAILABLE;
   }
 
   nsRefPtr<ServiceWorker> serviceWorker = static_cast<ServiceWorker*>(serviceWorkerISupports.get());

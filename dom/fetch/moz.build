@@ -26,8 +26,9 @@ UNIFIED_SOURCES += [
 ]
 
 LOCAL_INCLUDES += [
+    '../workers',
     # For nsDOMBlobBuilder.h
-    '/content/base/src'
+    '/content/base/src',
 ]
 
 FAIL_ON_WARNINGS = True

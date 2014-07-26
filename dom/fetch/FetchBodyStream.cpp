@@ -12,6 +12,8 @@
 #include "mozilla/dom/Promise.h"
 #include "mozilla/dom/workers/bindings/FileReaderSync.h"
 
+#include "File.h" // from workers
+
 using namespace mozilla::dom;
 
 NS_IMPL_CYCLE_COLLECTING_ADDREF(FetchBodyStream)
@@ -67,7 +69,7 @@ FetchBodyStream::AsBlob()
   }
 
   if (mBlob) {
-    AutoSafeJSContext cx;
+    ThreadsafeAutoJSContext cx;
     JS::Rooted<JS::Value> val(cx);
     nsresult rv = nsContentUtils::WrapNative(cx, mBlob, &val);
     if (NS_FAILED(rv)) {
@@ -124,18 +126,25 @@ FetchBodyStream::AsText()
   }
 
   if (mBlob) {
-    AutoSafeJSContext cx;
-    JS::Rooted<JS::Value> val(cx);
-    result = nsContentUtils::WrapNative(cx, mBlob, &val);
-    MOZ_ASSERT(val.isObjectOrNull());
-    JS::Rooted<JSObject*> asObject(cx, val.toObjectOrNull());
+    ThreadsafeAutoJSContext cx;
+    JS::Rooted<JSObject*> asObject(cx);
+    if (NS_IsMainThread()) {
+      JS::Rooted<JS::Value> val(cx);
+      result = nsContentUtils::WrapNative(cx, mBlob, &val);
+      asObject = val.toObjectOrNull();
+    } else {
+      asObject = workers::file::CreateBlob(cx, mBlob);
+    }
 
     // Only on worker for now, because i don't want to add the check.
     MOZ_ASSERT(!NS_IsMainThread());
     nsRefPtr<workers::FileReaderSync> reader = new workers::FileReaderSync();
 
     nsString body;
+
+    nsString encodingStr = NS_LITERAL_STRING("UTF-8");
     Optional<nsAString> encoding;
+    encoding = &encodingStr;
     reader->ReadAsText(asObject, encoding, body, result);
     if (result.Failed()) {
       promise->MaybeReject(result.ErrorCode());

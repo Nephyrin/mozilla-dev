@@ -62,7 +62,7 @@ public:
   }
 
   void GetHeader(const nsAString& header, DOMString& value) const;
-  already_AddRefed<Headers> Headers() const;
+  already_AddRefed<Headers> Headers_() const;
   already_AddRefed<FetchBodyStream> Body() const;
 
   static already_AddRefed<Request>

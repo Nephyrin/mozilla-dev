@@ -4,10 +4,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "Response.h"
+#include "nsDOMBlobBuilder.h"
 #include "nsDOMString.h"
 #include "nsPIDOMWindow.h"
 #include "nsIURI.h"
 #include "nsISupportsImpl.h"
+#include "nsIDOMFile.h"
 
 using namespace mozilla::dom;
 
@@ -70,6 +72,17 @@ Response::Constructor(const GlobalObject& global,
   nsRefPtr<Response> response = new Response(global.GetAsSupports());
   response->mStatus = aInit.mStatus;
   response->mStatusText = aInit.mStatusText.WasPassed() ? aInit.mStatusText.Value() : NS_LITERAL_CSTRING("OK");
+
+  if (aBody.WasPassed() && aBody.Value().IsString()) {
+    nsString body;
+    body.Assign(aBody.Value().GetAsString());
+    nsAutoPtr<BlobSet> blobBuilder(new BlobSet());
+    nsCString foo = NS_ConvertUTF16toUTF8(body);
+    blobBuilder->AppendVoidPtr(foo.get(), foo.Length());
+    response->mBody = new FetchBodyStream(global.GetAsSupports());
+    nsCOMPtr<nsIDOMBlob> blob = blobBuilder->GetBlobInternal(NS_LITERAL_CSTRING("text/plain"));
+    response->mBody->SetBlob(blob);
+  }
   // FIXME(nsm): Headers and body.
   return response.forget();
 }

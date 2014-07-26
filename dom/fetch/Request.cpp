@@ -13,6 +13,9 @@
 
 #include "mozilla/dom/FetchBodyStream.h"
 #include "mozilla/dom/URL.h"
+#include "mozilla/dom/workers/bindings/URL.h"
+
+#include "WorkerPrivate.h"
 
 namespace mozilla {
 namespace dom {
@@ -40,19 +43,22 @@ Request::~Request()
 void
 Request::GetHeader(const nsAString& header, DOMString& value) const
 {
+    return;
   MOZ_CRASH("NOT IMPLEMENTED!");
 }
 
 already_AddRefed<Headers>
-Request::Headers() const
+Request::Headers_() const
 {
-  MOZ_CRASH("NOT IMPLEMENTED!");
+  nsRefPtr<Headers> headers = new Headers(GetParentObject());
+  return headers.forget();
 }
 
 already_AddRefed<FetchBodyStream>
 Request::Body() const
 {
-  MOZ_CRASH("NOT IMPLEMENTED!");
+  nsRefPtr<FetchBodyStream> stream = new FetchBodyStream(GetParentObject());
+  return stream.forget();
 }
 
 already_AddRefed<InternalRequest>
@@ -72,36 +78,47 @@ Request::Constructor(const GlobalObject& global, const RequestOrString& aInput,
     request = aInput.GetAsRequest().GetInternalRequest();
   } else {
     nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(global.GetAsSupports());
-    MOZ_ASSERT(window);
-    MOZ_ASSERT(window->GetExtantDoc());
-    request = new InternalRequest(window->GetExtantDoc());
+    request = new InternalRequest(window ? window->GetExtantDoc() : nullptr);
   }
 
-  nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(global.GetAsSupports());
-  MOZ_ASSERT(window);
-  MOZ_ASSERT(window->GetExtantDoc());
-  request = request->GetRestrictedCopy(window->GetExtantDoc());
+  //nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(global.GetAsSupports());
+  //MOZ_ASSERT(window);
+  //MOZ_ASSERT(window->GetExtantDoc());
+  //request = request->GetRestrictedCopy(window->GetExtantDoc());
 
   if (aInput.IsString()) {
     nsString input;
     input.Assign(aInput.GetAsString());
     // FIXME(nsm): Add worker support.
-    workers::AssertIsOnMainThread();
+    // workers::AssertIsOnMainThread();
     nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(global.GetAsSupports());
-    MOZ_ASSERT(window);
-
-    nsCOMPtr<nsIURI> docURI = window->GetDocumentURI();
-    nsCString spec;
-    docURI->GetSpec(spec);
-    nsRefPtr<URL> url = URL::Constructor(global, input, NS_ConvertUTF8toUTF16(spec), aRv);
-    if (aRv.Failed()) {
-      return nullptr;
-    }
     nsString sURL;
-    url->Stringify(sURL, aRv);
-    if (aRv.Failed()) {
-      return nullptr;
+    if (window) {
+      nsCOMPtr<nsIURI> docURI = window->GetDocumentURI();
+      nsCString baseURL;
+      docURI->GetSpec(baseURL);
+      nsRefPtr<URL> url = URL::Constructor(global, input, NS_ConvertUTF8toUTF16(baseURL), aRv);
+      if (aRv.Failed()) {
+        return nullptr;
+      }
+      url->Stringify(sURL, aRv);
+      if (aRv.Failed()) {
+        return nullptr;
+      }
+    } else {
+      workers::WorkerPrivate* worker = workers::GetCurrentThreadWorkerPrivate();
+      MOZ_ASSERT(worker);
+      worker->AssertIsOnWorkerThread();
+      nsRefPtr<workers::URL> url = workers::URL::Constructor(global, input, worker->ScriptURL(), aRv);
+      if (aRv.Failed()) {
+        return nullptr;
+      }
+      url->Stringify(sURL, aRv);
+      if (aRv.Failed()) {
+        return nullptr;
+      }
     }
+
     request->SetURL(NS_ConvertUTF16toUTF8(sURL));
   }
 
